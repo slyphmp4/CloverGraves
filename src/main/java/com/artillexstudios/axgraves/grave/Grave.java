@@ -27,7 +27,6 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
-import org.bukkit.enchantments.EnchantmentTarget;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.HumanEntity;
@@ -150,42 +149,59 @@ public class Grave {
             if (!CONFIG.getBoolean("enable-instant-pickup", true)) return;
             if (CONFIG.getBoolean("instant-pickup-only-own", false) && !opener.getUniqueId().equals(player.getUniqueId())) return;
 
+            // Process each item once
             for (ItemStack it : gui.getContents()) {
-                if (it == null) continue;
+                if (it == null || it.getAmount() == 0) continue;
 
+                boolean wasEquipped = false;
+
+                // Try to auto-equip armor first
                 if (CONFIG.getBoolean("auto-equip-armor", true)) {
-                    if ((EnchantmentTarget.ARMOR_HEAD.includes(it) || it.getType().equals(Material.TURTLE_HELMET)) && opener.getInventory().getHelmet() == null) {
-                        opener.getInventory().setHelmet(it);
+                    String typeName = it.getType().name();
+                    ItemStack helmet = opener.getInventory().getHelmet();
+                    ItemStack chestplate = opener.getInventory().getChestplate();
+                    ItemStack leggings = opener.getInventory().getLeggings();
+                    ItemStack boots = opener.getInventory().getBoots();
+                    
+                    // Check helmet slot (empty if null or AIR)
+                    if ((typeName.endsWith("_HELMET") || it.getType() == Material.TURTLE_HELMET) 
+                        && (helmet == null || helmet.getType() == Material.AIR)) {
+                        opener.getInventory().setHelmet(it.clone());
                         it.setAmount(0);
-                        continue;
+                        wasEquipped = true;
                     }
-
-                    if ((EnchantmentTarget.ARMOR_TORSO.includes(it) || it.getType().equals(Material.ELYTRA)) && opener.getInventory().getChestplate() == null) {
-                        opener.getInventory().setChestplate(it);
+                    // Check chestplate slot (empty if null or AIR)
+                    else if ((typeName.endsWith("_CHESTPLATE") || it.getType() == Material.ELYTRA) 
+                        && (chestplate == null || chestplate.getType() == Material.AIR)) {
+                        opener.getInventory().setChestplate(it.clone());
                         it.setAmount(0);
-                        continue;
+                        wasEquipped = true;
                     }
-
-                    if (EnchantmentTarget.ARMOR_LEGS.includes(it) && opener.getInventory().getLeggings() == null) {
-                        opener.getInventory().setLeggings(it);
+                    // Check leggings slot (empty if null or AIR)
+                    else if (typeName.endsWith("_LEGGINGS") 
+                        && (leggings == null || leggings.getType() == Material.AIR)) {
+                        opener.getInventory().setLeggings(it.clone());
                         it.setAmount(0);
-                        continue;
+                        wasEquipped = true;
                     }
-
-                    if (EnchantmentTarget.ARMOR_FEET.includes(it) && opener.getInventory().getBoots() == null) {
-                        opener.getInventory().setBoots(it);
+                    // Check boots slot (empty if null or AIR)
+                    else if (typeName.endsWith("_BOOTS") 
+                        && (boots == null || boots.getType() == Material.AIR)) {
+                        opener.getInventory().setBoots(it.clone());
                         it.setAmount(0);
-                        continue;
+                        wasEquipped = true;
                     }
                 }
 
-                final Collection<ItemStack> ar = opener.getInventory().addItem(it).values();
-                if (ar.isEmpty()) {
-                    it.setAmount(0);
-                    continue;
+                // If not equipped, add to inventory
+                if (!wasEquipped && it.getAmount() > 0) {
+                    final Collection<ItemStack> leftover = opener.getInventory().addItem(it.clone()).values();
+                    if (leftover.isEmpty()) {
+                        it.setAmount(0);
+                    } else {
+                        it.setAmount(leftover.iterator().next().getAmount());
+                    }
                 }
-
-                it.setAmount(ar.iterator().next().getAmount());
             }
 
             update();

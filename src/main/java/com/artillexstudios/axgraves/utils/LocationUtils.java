@@ -2,7 +2,6 @@ package com.artillexstudios.axgraves.utils;
 
 import com.artillexstudios.axapi.libs.boostedyaml.block.implementation.Section;
 import org.bukkit.Location;
-import org.bukkit.World;
 import org.jetbrains.annotations.NotNull;
 
 import static com.artillexstudios.axgraves.AxGraves.CONFIG;

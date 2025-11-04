@@ -5,6 +5,7 @@ import com.artillexstudios.axgraves.api.events.GraveSpawnEvent;
 import com.artillexstudios.axgraves.grave.Grave;
 import com.artillexstudios.axgraves.grave.SpawnedGraves;
 import com.artillexstudios.axgraves.utils.ExperienceUtils;
+import com.artillexstudios.axgraves.utils.SafeLocationUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -17,8 +18,10 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static com.artillexstudios.axgraves.AxGraves.CONFIG;
+import static com.artillexstudios.axgraves.AxGraves.MESSAGEUTILS;
 
 public class DeathListener implements Listener {
 
@@ -41,6 +44,27 @@ public class DeathListener implements Listener {
 
         Location location = player.getLocation();
         location.add(0, -0.5, 0);
+
+        // Safe grave spawn feature - find safe location if enabled
+        // Made by dei0 (dei2004) - https://github.com/dei2004
+        Location originalLocation = location.clone();
+        
+        if (CONFIG.getBoolean("safe-grave-spawn.enabled", true)) {
+            // Hardcoded max search: 100 blocks radius and 100 blocks vertical (500 for End)
+            location = SafeLocationUtils.findSafeLocation(location);
+            
+            // Notify player if grave was moved to a safe location
+            double distance = originalLocation.distance(location);
+            
+            if (distance > 1.0) {
+                MESSAGEUTILS.sendLang(player, "safe-spawn-message.message", Map.of(
+                    "%world%", location.getWorld().getName(), 
+                    "%x%", "" + location.getBlockX(), 
+                    "%y%", "" + location.getBlockY(), 
+                    "%z%", "" + location.getBlockZ()
+                ));
+            }
+        }
 
         final GravePreSpawnEvent gravePreSpawnEvent = new GravePreSpawnEvent(player, location);
         Bukkit.getPluginManager().callEvent(gravePreSpawnEvent);

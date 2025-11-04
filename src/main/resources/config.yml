@@ -110,6 +110,22 @@ save-graves:
   # set to -1 to make it only save on shutdown (it might not save if there is a crash)
   auto-save-seconds: 30
 
+# safe grave spawning - finds safe locations when players die in dangerous areas
+# made by dei0 (dei2004) - https://github.com/dei2004
+# searches up to 100 blocks horizontally and 100 blocks vertically
+safe-grave-spawn:
+  # should the plugin find safe locations for graves?
+  enabled: true
+
+# teleport command cooldown in seconds
+# made by dei0 (dei2004) - https://github.com/dei2004
+# players with axgraves.tp.bypass.cooldown permission will bypass this cooldown
+teleport-cooldown: 5
+
+# message displayed as title during teleport countdown
+# %time% will be replaced with seconds remaining
+teleport-countdown-display: "&#00FF00✈ Teleporting in &#FFFFFF%time%s"
+
 # items that will be removed on death and will not show up in graves
 blacklisted-items:
   "1":

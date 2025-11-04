@@ -27,10 +27,18 @@ death-message:
   enabled: false
   message: "&#FFAAAAYou have died at &f%world% %x%, %y%, %z%&#FFAAAA!"
 
+safe-spawn-message:
+  enabled: true
+  message: "&#FFAAAAYour grave was moved to a safe location at &f%world% %x%, %y%, %z%&#FFAAAA!"
+
 grave-list:
   header: "&#FF00FF&l=== GRAVES ==="
   grave: "&#FF00FF[TP] &#FFAAFF%player% &7- &#FFAAFF%world% %x%, %y%, %z% &7(%time%)"
   no-graves: "&#FFAAFFNo grave found!"
+
+teleport:
+  cooldown: "&#FFAAAAYou must wait &#FFFFFF%time% &#FFAAAAseconds before teleporting again!"
+  cancelled: "&#FF5555Teleport cancelled because you moved!"
 
 update-notifier: "&#FF88FFThere is a new version of AxGraves available! &#DDDDDD(&#FFFFFFcurrent: &#FF0000%current% &#DDDDDD| &#FFFFFFlatest: &#00FF00%latest%&#DDDDDD)"
 

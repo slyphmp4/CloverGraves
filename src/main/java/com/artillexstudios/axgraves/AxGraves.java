@@ -26,6 +26,12 @@ import java.io.File;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
+/**
+ * AxGraves - Advanced Grave System for Minecraft
+ * 
+ * IMPROVED BY: dei0 (dei2004)
+ * GITHUB: https://github.com/dei2004
+ */
 public final class AxGraves extends AxPlugin {
     private static AxPlugin instance;
     public static Config CONFIG;
@@ -40,6 +46,13 @@ public final class AxGraves extends AxPlugin {
 
     public void enable() {
         instance = this;
+
+        // Display attribution
+        getLogger().info("=====================================");
+        getLogger().info("  AxGraves - Advanced Grave System  ");
+        getLogger().info("  IMPROVED BY: dei0 (dei2004)       ");
+        getLogger().info("  GitHub: https://github.com/dei2004");
+        getLogger().info("=====================================");
 
         new Metrics(this, 20332);
 
@@ -70,6 +83,13 @@ public final class AxGraves extends AxPlugin {
     }
 
     public void disable() {
+        getLogger().info("=====================================");
+        getLogger().info("  AxGraves - Shutting Down          ");
+        getLogger().info("  IMPROVED BY: dei0 (dei2004)       ");
+        getLogger().info("  GitHub: https://github.com/dei2004");
+        getLogger().info("  Thank you for using AxGraves!     ");
+        getLogger().info("=====================================");
+        
         if (metrics != null) metrics.cancel();
 
         TickGraves.stop();

@@ -12,6 +12,7 @@ import revxrsal.commands.annotation.Command;
 import revxrsal.commands.annotation.DefaultFor;
 import revxrsal.commands.annotation.Optional;
 import revxrsal.commands.annotation.Subcommand;
+import revxrsal.commands.annotation.AutoComplete;
 import revxrsal.commands.bukkit.annotation.CommandPermission;
 
 @Command({"axgraves", "axgrave", "grave", "graves"})
@@ -37,6 +38,7 @@ public class Commands {
 
     @Subcommand("tp")
     @CommandPermission("axgraves.tp")
+    @AutoComplete("@nothing")
     public void tp(@NotNull Player sender, @Optional World world, @Optional Double x, @Optional Double y, @Optional Double z) {
         Teleport.INSTANCE.execute(sender, world, x, y, z);
     }
