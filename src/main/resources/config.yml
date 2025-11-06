@@ -5,6 +5,11 @@ prefix: "<gradient:#FF00FF:#DD00FF><b>AxGraves</b></gradient> &7» "
 # in seconds
 despawn-time-seconds: 180
 
+# Pause timer when player is offline - Made by dei0 (dei2004)
+# When enabled, the grave despawn timer only counts down while the grave owner is online
+# When disabled, timer runs in real-time even when player is offline (original behavior)
+pause-timer-when-offline: true
+
 # should graves drop all items on the ground when they expire?
 # if false: items will be removed
 drop-items: true

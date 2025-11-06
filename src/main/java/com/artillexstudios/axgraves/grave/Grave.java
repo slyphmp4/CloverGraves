@@ -57,6 +57,10 @@ public class Grave {
     private final PacketEntity entity;
     private Hologram hologram;
     private boolean removed = false;
+    
+    // Timer pause feature - Made by dei0 (dei2004)
+    private long accumulatedTime = 0; // Time that has been counted while player was online
+    private long lastOnlineTimestamp = System.currentTimeMillis(); // Last time we saw the player online
 
     public Grave(Location loc, @NotNull OfflinePlayer offlinePlayer, @NotNull List<ItemStack> items, int storedXP, long date) {
         items = new ArrayList<>(items);
@@ -115,7 +119,34 @@ public class Grave {
         int items = countItems();
 
         int time = CONFIG.getInt("despawn-time-seconds", 180);
-        boolean outOfTime = time * 1_000L <= (System.currentTimeMillis() - spawned);
+        
+        // Timer pause feature - Made by dei0 (dei2004)
+        // Only count time when player is online (if pause-timer-when-offline is enabled)
+        boolean pauseWhenOffline = CONFIG.getBoolean("pause-timer-when-offline", true);
+        long elapsedTime;
+        
+        if (pauseWhenOffline) {
+            Player onlinePlayer = player.getPlayer();
+            
+            if (onlinePlayer != null && onlinePlayer.isOnline()) {
+                // Player is online - add elapsed time since last check
+                long currentTime = System.currentTimeMillis();
+                long sessionTime = currentTime - lastOnlineTimestamp;
+                accumulatedTime += sessionTime;
+                lastOnlineTimestamp = currentTime;
+                elapsedTime = accumulatedTime;
+            } else {
+                // Player is offline - don't count time, just use accumulated time
+                elapsedTime = accumulatedTime;
+                // Update timestamp so we don't count offline time when they come back
+                lastOnlineTimestamp = System.currentTimeMillis();
+            }
+        } else {
+            // Old behavior - always count time even when offline
+            elapsedTime = System.currentTimeMillis() - spawned;
+        }
+        
+        boolean outOfTime = time * 1_000L <= elapsedTime;
         boolean despawn = CONFIG.getBoolean("despawn-when-empty", true);
         boolean empty = items == 0 && storedXP == 0;
         if ((time != -1 && outOfTime) || (despawn && empty)) {
@@ -144,7 +175,10 @@ public class Grave {
             this.storedXP = 0;
         }
 
-        if (slot != null && slot.equals(ServerboundInteractWrapper.InteractionHand.MAIN_HAND) && opener.isSneaking()) {
+        // Swapped interaction - Made by dei0 (dei2004)
+        // Right-click (NOT sneaking) = Instant pickup all items
+        // Shift+Right-click (sneaking) = Open grave GUI
+        if (slot != null && slot.equals(ServerboundInteractWrapper.InteractionHand.MAIN_HAND) && !opener.isSneaking()) {
             if (opener.getGameMode() == GameMode.SPECTATOR) return;
             if (!CONFIG.getBoolean("enable-instant-pickup", true)) return;
             if (CONFIG.getBoolean("instant-pickup-only-own", false) && !opener.getUniqueId().equals(player.getUniqueId())) return;
@@ -323,5 +357,15 @@ public class Grave {
 
     public String getPlayerName() {
         return playerName;
+    }
+    
+    // Timer pause feature getters/setters - Made by dei0 (dei2004)
+    public long getAccumulatedTime() {
+        return accumulatedTime;
+    }
+    
+    public void setAccumulatedTime(long accumulatedTime) {
+        this.accumulatedTime = accumulatedTime;
+        this.lastOnlineTimestamp = System.currentTimeMillis();
     }
 }

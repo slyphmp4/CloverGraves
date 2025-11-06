@@ -66,6 +66,9 @@ public class SpawnedGraves {
             obj.addProperty("items", Base64.getEncoder().encodeToString(Serializers.ITEM_ARRAY.serialize(grave.getGui().getContents())));
             obj.addProperty("xp", grave.getStoredXP());
             obj.addProperty("date", grave.getSpawned());
+            
+            // Save timer state - Made by dei0 (dei2004)
+            obj.addProperty("accumulatedTime", grave.getAccumulatedTime());
 
             array.add(obj);
         }
@@ -99,7 +102,13 @@ public class SpawnedGraves {
                 ItemStack[] items = Serializers.ITEM_ARRAY.deserialize(Base64.getDecoder().decode(itStr));
                 int xp = obj.get("xp").getAsInt();
                 long date = obj.get("date").getAsLong();
-                addGrave(new Grave(location, owner, Arrays.asList(items), xp, date));
+                
+                // Load timer state - Made by dei0 (dei2004)
+                long accumulatedTime = obj.has("accumulatedTime") ? obj.get("accumulatedTime").getAsLong() : 0;
+                
+                Grave grave = new Grave(location, owner, Arrays.asList(items), xp, date);
+                grave.setAccumulatedTime(accumulatedTime);
+                addGrave(grave);
             }
         } catch (Exception ex) {
             ex.printStackTrace();

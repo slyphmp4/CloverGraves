@@ -51,7 +51,9 @@ public class DeathListener implements Listener {
         
         if (CONFIG.getBoolean("safe-grave-spawn.enabled", true)) {
             // Hardcoded max search: 100 blocks radius and 100 blocks vertical (500 for End)
-            location = SafeLocationUtils.findSafeLocation(location);
+            // findSafeLocation returns the SOLID BLOCK location, so we add +1 to spawn grave ON TOP
+            Location safeBlock = SafeLocationUtils.findSafeLocation(location);
+            location = safeBlock.clone().add(0, 1, 0); // Place grave on top of the safe block
             
             // Notify player if grave was moved to a safe location
             double distance = originalLocation.distance(location);

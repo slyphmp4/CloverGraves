@@ -66,6 +66,7 @@ public final class AxGraves extends AxPlugin {
 
         BukkitCommandHandler handler = BukkitCommandHandler.create(instance);
         handler.register(new Commands());
+        handler.register(new com.artillexstudios.axgraves.commands.GTPCommand()); // /gtp alias - Made by dei0 (dei2004)
 
         GravePlaceholders.register();
 
@@ -78,8 +79,6 @@ public final class AxGraves extends AxPlugin {
 
         metrics = new AxMetrics(this, 20);
         metrics.start();
-
-        if (CONFIG.getBoolean("update-notifier.enabled", true)) new UpdateNotifier(this, 5076);
     }
 
     public void disable() {

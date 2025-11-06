@@ -70,35 +70,40 @@ public class SafeLocationUtils {
     /**
      * Checks if a location is safe for grave spawning
      * A safe location must have:
-     * - Solid ground below
-     * - 2 blocks of air/passable space above for player
-     * - No dangerous materials nearby
-     * - Not in void (must have solid blocks within 10 blocks below)
+     * - Current block is solid and safe (the grave will be placed ON this block)
+     * - 2 blocks of air/passable space above for the grave and player
+     * - No dangerous materials
+     * - Not in void
      * 
-     * @param location The location to check
+     * @param location The location to check (this should be the SOLID BLOCK the grave sits on)
      * @return true if the location is safe, false otherwise
      */
     public static boolean isSafeLocation(@NotNull Location location) {
         Block block = location.getBlock();
-        Block below = block.getRelative(BlockFace.DOWN);
         Block above = block.getRelative(BlockFace.UP);
         Block twoAbove = above.getRelative(BlockFace.UP);
         
         // Check if in void (below minimum world height)
-        if (location.getY() < location.getWorld().getMinHeight() + 5) {
+        if (location.getY() < location.getWorld().getMinHeight()) {
             return false;
         }
         
-        // Check if at or above max height (need space for player)
+        // Check if at or above max height (need space above for grave)
         if (location.getY() >= location.getWorld().getMaxHeight() - 2) {
             return false;
         }
         
-        // Current block and 2 blocks above MUST be passable (air/grass/water)
-        // This ensures player can stand here
-        if (!isPassableMaterial(block.getType())) {
+        // Current block MUST be solid (this is what the grave sits ON)
+        if (!block.getType().isSolid()) {
             return false;
         }
+        
+        // Current block must not be dangerous
+        if (isUnsafeMaterial(block.getType())) {
+            return false;
+        }
+        
+        // 2 blocks above MUST be passable (space for grave and player)
         if (!isPassableMaterial(above.getType())) {
             return false;
         }
@@ -106,37 +111,8 @@ public class SafeLocationUtils {
             return false;
         }
         
-        // Check if the blocks are dangerous
-        if (isUnsafeMaterial(block.getType()) || isUnsafeMaterial(above.getType()) || isUnsafeMaterial(twoAbove.getType())) {
-            return false;
-        }
-        
-        // Block below MUST be solid and safe
-        if (!below.getType().isSolid()) {
-            return false;
-        }
-        
-        // Block below must not be dangerous
-        if (isUnsafeMaterial(below.getType())) {
-            return false;
-        }
-        
-        // Check if we're floating in air (void check) - enhanced void detection
-        if (below.getType() == Material.AIR || below.getType() == Material.CAVE_AIR || below.getType() == Material.VOID_AIR) {
-            return false;
-        }
-        
-        // Enhanced void check - make sure there's solid ground within 10 blocks below
-        boolean hasSolidGroundBelow = false;
-        for (int i = 1; i <= 10; i++) {
-            Block checkBelow = location.clone().subtract(0, i, 0).getBlock();
-            if (checkBelow.getType().isSolid() && !isUnsafeMaterial(checkBelow.getType())) {
-                hasSolidGroundBelow = true;
-                break;
-            }
-        }
-        
-        if (!hasSolidGroundBelow) {
+        // Check if the blocks above are dangerous
+        if (isUnsafeMaterial(above.getType()) || isUnsafeMaterial(twoAbove.getType())) {
             return false;
         }
         
@@ -167,17 +143,36 @@ public class SafeLocationUtils {
      * Finds a safe location near the death location
      * Searches in a spiral pattern outward from the death location
      * Priority order: Same Y level → Above → Below → Further away
+     * Returns the SOLID BLOCK location (grave will spawn on top of this)
      * 
      * @param deathLocation The original death location
      * @param maxRadius Maximum search radius in blocks
      * @param maxVerticalSearch Maximum vertical search distance
-     * @return A safe location, or the original location if no safe spot found
+     * @return A safe location (the solid block), or the best fallback location
      */
     @NotNull
     public static Location findSafeLocation(@NotNull Location deathLocation, int maxRadius, int maxVerticalSearch) {
-        // First check if current location is already safe
-        if (isSafeLocation(deathLocation)) {
-            return deathLocation.clone();
+        // First, find solid ground at or near the death location
+        Location searchStart = deathLocation.clone();
+        
+        // If we're standing in air, first find the ground below us
+        if (!searchStart.getBlock().getType().isSolid()) {
+            for (int y = 0; y >= -50; y--) {
+                Location groundCheck = deathLocation.clone().add(0, y, 0);
+                if (groundCheck.getY() < groundCheck.getWorld().getMinHeight()) {
+                    break;
+                }
+                
+                if (groundCheck.getBlock().getType().isSolid() && !isUnsafeMaterial(groundCheck.getBlock().getType())) {
+                    searchStart = groundCheck;
+                    break;
+                }
+            }
+        }
+        
+        // Check if current block is already safe
+        if (isSafeLocation(searchStart)) {
+            return searchStart.clone();
         }
         
         // Priority 1: Search same Y level first (horizontal only)
@@ -189,7 +184,7 @@ public class SafeLocationUtils {
                         continue;
                     }
                     
-                    Location checkLocation = deathLocation.clone().add(x, 0, z);
+                    Location checkLocation = searchStart.clone().add(x, 0, z);
                     
                     // Skip if out of world bounds
                     if (checkLocation.getY() < checkLocation.getWorld().getMinHeight() || 
@@ -214,7 +209,7 @@ public class SafeLocationUtils {
                     
                     // Search upward first
                     for (int y = 1; y <= maxVerticalSearch; y++) {
-                        Location checkLocation = deathLocation.clone().add(x, y, z);
+                        Location checkLocation = searchStart.clone().add(x, y, z);
                         
                         if (checkLocation.getY() >= checkLocation.getWorld().getMaxHeight() - 2) {
                             break;
@@ -238,7 +233,7 @@ public class SafeLocationUtils {
                     
                     // Search downward
                     for (int y = -1; y >= -maxVerticalSearch; y--) {
-                        Location checkLocation = deathLocation.clone().add(x, y, z);
+                        Location checkLocation = searchStart.clone().add(x, y, z);
                         
                         if (checkLocation.getY() < checkLocation.getWorld().getMinHeight()) {
                             break;
@@ -252,36 +247,50 @@ public class SafeLocationUtils {
             }
         }
         
-        // Priority 4: Find nearest surface above (emergency)
-        Location surfaceCheck = deathLocation.clone();
-        for (int y = 0; y < 50; y++) {
-            surfaceCheck.add(0, 1, 0);
-            if (surfaceCheck.getY() >= surfaceCheck.getWorld().getMaxHeight() - 2) {
-                break;
-            }
-            
-            if (isSafeLocation(surfaceCheck)) {
-                return surfaceCheck;
-            }
-        }
-        
-        // Last resort: Try to find ANY solid ground nearby
-        for (int y = deathLocation.getBlockY(); y >= deathLocation.getWorld().getMinHeight(); y--) {
-            Location groundCheck = deathLocation.clone();
-            groundCheck.setY(y);
-            
-            if (groundCheck.getBlock().getType().isSolid() && 
-                !isUnsafeMaterial(groundCheck.getBlock().getType())) {
-                // Found solid ground, check if we can spawn above it
-                Location spawnLocation = groundCheck.clone().add(0, 1, 0);
-                if (isSafeLocation(spawnLocation)) {
-                    return spawnLocation;
+        // Emergency fallback: Find ANY solid ground nearby
+        for (int radius = 1; radius <= Math.min(maxRadius, 50); radius++) {
+            for (int x = -radius; x <= radius; x++) {
+                for (int z = -radius; z <= radius; z++) {
+                    for (int y = 10; y >= -10; y--) {
+                        Location checkLocation = searchStart.clone().add(x, y, z);
+                        
+                        if (checkLocation.getY() < checkLocation.getWorld().getMinHeight() || 
+                            checkLocation.getY() >= checkLocation.getWorld().getMaxHeight() - 2) {
+                            continue;
+                        }
+                        
+                        Block block = checkLocation.getBlock();
+                        if (block.getType().isSolid() && !isUnsafeMaterial(block.getType())) {
+                            // Found solid ground, check if we can spawn above it
+                            if (isSafeLocation(checkLocation)) {
+                                return checkLocation;
+                            }
+                        }
+                    }
                 }
             }
         }
         
-        // Absolute last resort: return original location
-        return deathLocation.clone();
+        // Absolute last resort: Create a safe spot at the search start location
+        // Return the block below the death location if it's solid, otherwise the death location
+        if (searchStart.getBlock().getType().isSolid()) {
+            return searchStart.clone();
+        }
+        
+        // Try to find the nearest solid block below
+        for (int y = 0; y >= -64; y--) {
+            Location fallback = searchStart.clone().add(0, y, 0);
+            if (fallback.getY() < fallback.getWorld().getMinHeight()) {
+                break;
+            }
+            
+            if (fallback.getBlock().getType().isSolid() && !isUnsafeMaterial(fallback.getBlock().getType())) {
+                return fallback;
+            }
+        }
+        
+        // Very last resort: return search start
+        return searchStart.clone();
     }
     
     /**

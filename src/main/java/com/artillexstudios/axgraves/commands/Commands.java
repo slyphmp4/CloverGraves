@@ -38,7 +38,7 @@ public class Commands {
 
     @Subcommand("tp")
     @CommandPermission("axgraves.tp")
-    @AutoComplete("@nothing")
+    @AutoComplete("@nothing @nothing @nothing @nothing")
     public void tp(@NotNull Player sender, @Optional World world, @Optional Double x, @Optional Double y, @Optional Double z) {
         Teleport.INSTANCE.execute(sender, world, x, y, z);
     }
