@@ -143,6 +143,15 @@
             <version>2.3.232</version>
             <scope>test</scope>
         </dependency>
+        <!-- test-only: DatabaseConfig's constructor touches DatabaseTypes, which needs fastutil.
+             On a live server this is provided by the Paper/Spigot server jar itself (Minecraft
+             uses fastutil internally); a bare test JVM has no such jar, so it's supplied here. -->
+        <dependency>
+            <groupId>it.unimi.dsi</groupId>
+            <artifactId>fastutil</artifactId>
+            <version>8.5.13</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <distributionManagement>

@@ -3,6 +3,7 @@ package com.artillexstudios.axgraves.storage;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -24,6 +25,10 @@ public interface GraveStorage {
 
     @NotNull
     List<GraveRecord> history(@NotNull UUID owner, int limit);
+
+    /** A single history entry by id, used to reconstruct the grave being restored. */
+    @NotNull
+    Optional<GraveRecord> historyEntry(long historyId);
 
     /**
      * Atomically marks a history entry as restored, returning {@code true} the first time and

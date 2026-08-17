@@ -1,8 +1,10 @@
 package com.artillexstudios.axgraves.commands;
 
 import com.artillexstudios.axgraves.commands.subcommands.Help;
+import com.artillexstudios.axgraves.commands.subcommands.History;
 import com.artillexstudios.axgraves.commands.subcommands.List;
 import com.artillexstudios.axgraves.commands.subcommands.Reload;
+import com.artillexstudios.axgraves.commands.subcommands.Restore;
 import com.artillexstudios.axgraves.commands.subcommands.Teleport;
 import org.bukkit.World;
 import org.bukkit.command.CommandSender;
@@ -38,5 +40,17 @@ public class Commands implements OrphanCommand {
     @CommandPermission("axgraves.tp")
     public void tp(@NotNull Player sender, @Optional World world, @Optional Double x, @Optional Double y, @Optional Double z) {
         Teleport.INSTANCE.execute(sender, world, x, y, z);
+    }
+
+    @Subcommand("history")
+    @CommandPermission("axgraves.history")
+    public void history(@NotNull CommandSender sender, @NotNull String player) {
+        History.INSTANCE.execute(sender, player);
+    }
+
+    @Subcommand("restore")
+    @CommandPermission("axgraves.restore")
+    public void restore(@NotNull CommandSender sender, @NotNull String player, long id) {
+        Restore.INSTANCE.execute(sender, player, id);
     }
 }

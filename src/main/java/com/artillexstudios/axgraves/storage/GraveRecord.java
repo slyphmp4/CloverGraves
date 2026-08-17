@@ -18,15 +18,21 @@ import java.util.UUID;
  */
 public record GraveRecord(long id, @NotNull UUID owner, @Nullable String ownerName, @NotNull String location,
                            byte[] items, int dataVersion, int storedXP, long createdAt,
-                           @Nullable EndReason endReason, @Nullable Long endedAt) {
+                           @Nullable EndReason endReason, @Nullable Long endedAt, boolean restored) {
+
+    public GraveRecord(long id, @NotNull UUID owner, @Nullable String ownerName, @NotNull String location,
+                        byte[] items, int dataVersion, int storedXP, long createdAt,
+                        @Nullable EndReason endReason, @Nullable Long endedAt) {
+        this(id, owner, ownerName, location, items, dataVersion, storedXP, createdAt, endReason, endedAt, false);
+    }
 
     @NotNull
     public GraveRecord withId(long newId) {
-        return new GraveRecord(newId, owner, ownerName, location, items, dataVersion, storedXP, createdAt, endReason, endedAt);
+        return new GraveRecord(newId, owner, ownerName, location, items, dataVersion, storedXP, createdAt, endReason, endedAt, restored);
     }
 
     @NotNull
     public GraveRecord ended(@NotNull EndReason reason, long at) {
-        return new GraveRecord(id, owner, ownerName, location, items, dataVersion, storedXP, createdAt, reason, at);
+        return new GraveRecord(id, owner, ownerName, location, items, dataVersion, storedXP, createdAt, reason, at, restored);
     }
 }

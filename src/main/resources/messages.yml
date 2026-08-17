@@ -42,6 +42,7 @@ restore:
   success: "&#33FF33Restored grave &f#%id%&#33FF33 belonging to &f%player%&#33FF33 at &f%world% %x%, %y%, %z%&#33FF33."
   not-found: "&#FF3333No grave &f#%id%&#FF3333 found for &f%player%&#FF3333."
   already-restored: "&#FF3333Grave &f#%id%&#FF3333 has already been restored."
+  failed: "&#FF3333Failed to restore grave &f#%id%&#FF3333 - see console for details."
   unsupported: "&#FF3333Grave history/restore requires a SQL storage backend (see storage.type in config.yml)."
 
 grave-list:
