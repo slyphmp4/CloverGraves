@@ -22,6 +22,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.EventExecutor;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -204,44 +205,66 @@ public class DeathListener implements Listener {
         World world = location.getWorld();
         if (world == null) return;
 
-        LocationUtils.HeightLimits limits = LocationUtils.getHeightLimits(world);
-        PlacementSettings settings = new PlacementSettings(
-                true,
-                CONFIG.getBoolean("safe-placement.avoid-lava", true),
-                CONFIG.getBoolean("safe-placement.avoid-solid", true),
-                CONFIG.getBoolean("safe-placement.avoid-nether-roof", true),
-                CONFIG.getInt("safe-placement.nether-roof-y", 125),
-                CONFIG.getInt("safe-placement.max-horizontal-radius", 5),
-                CONFIG.getInt("safe-placement.max-vertical-distance", 16),
-                (int) limits.min(),
-                (int) limits.max(),
-                CONFIG.getBoolean("safe-placement.notify-owner", true)
-        );
+        PlacementSettings settings = buildPlacementSettings(world);
+        BlockProbe probe = new BukkitBlockProbe(world);
 
         // `location` has already been shifted down 0.5 blocks (see the caller) so that it
         // anchors to the ground block the player was standing ON, not the air block they were
         // standing IN - that's intentional, it's what makes the grave sit flush with the floor.
-        // The space that actually needs a safety check is one block *above* that anchor: the
-        // ground block itself being solid is expected, not a hazard.
-        BlockProbe probe = new BukkitBlockProbe(world);
+        // The space that actually needs a safety check is one block *above* that anchor.
         int standingY = location.getBlockY() + 1;
         SafeLocationFinder.Result result = SafeLocationFinder.find(probe, location.getBlockX(), standingY, location.getBlockZ(), settings);
-        if (!result.relocated()) return;
+
+        boolean usedSpawnFallback = false;
+        if (!result.found()) {
+            // the local search found nothing at all within its budget - this is what a genuine
+            // void death looks like (an empty column has no solid block anywhere nearby, so
+            // there's nothing to stand on), as opposed to "already fine" or "found something
+            // nearby". Search around the world's spawn instead of leaving the grave floating in
+            // open space - spawn terrain is essentially guaranteed to be loaded and solid.
+            Location spawn = world.getSpawnLocation();
+            SafeLocationFinder.Result fallback = SafeLocationFinder.find(probe, spawn.getBlockX(), spawn.getBlockY() + 1, spawn.getBlockZ(), settings);
+            if (!fallback.found()) return; // nothing safe found anywhere reasonable - leave the grave where it died
+            result = fallback;
+            usedSpawnFallback = true;
+        }
+
+        if (!result.relocated() && !usedSpawnFallback) return; // original spot was already fine
 
         location.setX(result.x() + 0.5);
         location.setY(result.y() - 1);
         location.setZ(result.z() + 0.5);
 
         if (debug) {
-            LogUtils.debug("[{}] grave relocated to {},{},{} ({} probes)", player.getName(), result.x(), result.y(), result.z(), result.probes());
+            LogUtils.debug("[{}] grave relocated to {},{},{} ({} probes, spawnFallback={})",
+                    player.getName(), result.x(), result.y(), result.z(), result.probes(), usedSpawnFallback);
         }
 
         if (settings.notifyOwner()) {
-            MESSAGEUTILS.sendLang(player, "grave-relocated", Map.of(
+            String key = usedSpawnFallback ? "grave-relocated-far" : "grave-relocated";
+            MESSAGEUTILS.sendLang(player, key, Map.of(
                     "%world%", LocationUtils.getWorldName(world),
                     "%x%", "" + result.x(),
                     "%y%", "" + result.y(),
                     "%z%", "" + result.z()));
         }
+    }
+
+    @NotNull
+    private static PlacementSettings buildPlacementSettings(@NotNull World world) {
+        LocationUtils.HeightLimits limits = LocationUtils.getHeightLimits(world);
+        return new PlacementSettings(
+                true,
+                CONFIG.getBoolean("safe-placement.avoid-lava", true),
+                CONFIG.getBoolean("safe-placement.avoid-solid", true),
+                CONFIG.getBoolean("safe-placement.avoid-nether-roof", true),
+                CONFIG.getInt("safe-placement.nether-roof-y", 125),
+                CONFIG.getBoolean("safe-placement.require-ground-support", true),
+                CONFIG.getInt("safe-placement.max-horizontal-radius", 5),
+                CONFIG.getInt("safe-placement.max-vertical-distance", 16),
+                (int) limits.min(),
+                (int) limits.max(),
+                CONFIG.getBoolean("safe-placement.notify-owner", true)
+        );
     }
 }

@@ -11,6 +11,7 @@ help:
   - " <#FF55FF>➤ <white>/axgraves tp <#DDDDDD>| <#FFAAFF>Teleport to last grave"
   - " <#FF55FF>➤ <white>/axgraves history <player> <#DDDDDD>| <#FFAAFF>View a player's grave history"
   - " <#FF55FF>➤ <white>/axgraves restore <player> <id> <#DDDDDD>| <#FFAAFF>Restore a past grave"
+  - " <#FF55FF>➤ <white>/bibingka grave tp <#DDDDDD>| <#FFAAFF>Teleport to your grave (5s warmup, 60s cooldown)"
   - " "
 
 gui-name: "&0%player%'s Grave"
@@ -31,6 +32,15 @@ death-message:
   message: "&#FFAAAAYou have died at &f%world% %x%, %y%, %z%&#FFAAAA!"
 
 grave-relocated: "&#FFAAAAYour grave could not fit where you died and was moved to &f%world% %x%, %y%, %z%&#FFAAAA!"
+grave-relocated-far: "&#FFAAAANo safe ground was found near where you died, so your grave was moved near spawn: &f%world% %x%, %y%, %z%&#FFAAAA!"
+
+teleport:
+  cooldown: "&#FFAAFFYou must wait &f%time%&#FFAAFF before teleporting to your grave again!"
+  already-pending: "&#FFAAFFYou already have a teleport in progress!"
+  warmup-start: "&#FFAAFFTeleporting to your grave in &f%seconds%s&#FFAAFF... don't move!"
+  countdown: "&#FFAAFF%seconds%..."
+  warmup-complete: "&#33FF33Teleporting now!"
+  cancelled: "&#FF3333Teleport cancelled!"
 
 history:
   header: "&#FF00FF&l=== GRAVE HISTORY: %player% ==="
@@ -63,4 +73,4 @@ commands:
 update-notifier: "&#FF88FFThere is a new version of AxGraves available! &#DDDDDD(&#FFFFFFcurrent: &#FF0000%current% &#DDDDDD| &#FFFFFFlatest: &#00FF00%latest%&#DDDDDD)"
 
 # do not edit
-version: 7
+version: 8

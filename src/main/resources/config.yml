@@ -69,6 +69,11 @@ safe-placement:
   avoid-nether-roof: true
   # y coordinate at/above which a nether location counts as "the roof"
   nether-roof-y: 125
+  # require actual solid ground directly beneath the grave, not just "not lava/not solid
+  # itself". without this, an empty column of void air always counts as "safe" (it's neither
+  # solid nor lava), so a death far below the world would never be relocated at all - it would
+  # just float in open space. keep this true unless you have a reason not to.
+  require-ground-support: true
   # hard-capped to 16 regardless of this value
   max-horizontal-radius: 5
   max-vertical-distance: 16
@@ -141,6 +146,18 @@ history:
   keep-per-player: 5
   keep-days: 14
 
+# /axgraves tp (and /bibingka grave tp) - teleporting to your own grave
+teleport:
+  # minimum time between uses, per player. only starts counting after a teleport actually
+  # completes - a teleport cancelled by moving does not use up the cooldown.
+  cooldown-seconds: 60
+  # the teleport is not instant: a countdown runs for this many seconds first
+  warmup-seconds: 5
+  # cancel the pending teleport if the player moves during the countdown
+  cancel-on-move: true
+  # cancel the pending teleport if the player takes damage during the countdown
+  cancel-on-damage: true
+
 # by default every grave will use the player's skull
 # with this setting you can override it
 custom-grave-skull:
@@ -167,6 +184,7 @@ command-aliases:
   - "axgrave"
   - "graves"
   - "grave"
+  - "bibingka"
 
 # used for the %world% placeholder
 # if a world isn't defined here, it will default to the original name of the world
@@ -225,4 +243,4 @@ update-notifier:
 debug: false
 
 # do not edit
-version: 20
+version: 21

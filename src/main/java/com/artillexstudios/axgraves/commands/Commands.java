@@ -42,6 +42,13 @@ public class Commands implements OrphanCommand {
         Teleport.INSTANCE.execute(sender, world, x, y, z);
     }
 
+    // same command, reachable as a nested path too (e.g. /bibingka grave tp) - see Teleport
+    @Subcommand("grave tp")
+    @CommandPermission("axgraves.tp")
+    public void graveTp(@NotNull Player sender, @Optional World world, @Optional Double x, @Optional Double y, @Optional Double z) {
+        Teleport.INSTANCE.execute(sender, world, x, y, z);
+    }
+
     @Subcommand("history")
     @CommandPermission("axgraves.history")
     public void history(@NotNull CommandSender sender, @NotNull String player) {

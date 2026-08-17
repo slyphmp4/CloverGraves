@@ -12,19 +12,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Exercises {@link SafeLocationFinder} against a fake in-memory voxel grid ({@link FakeBlockProbe})
  * instead of a live Bukkit world - this is exactly the seam {@link BlockProbe} exists for.
+ *
+ * <p>All scenarios run with {@code requireGroundSupport = true} (the shipped default): a spot is
+ * only accepted if there is an actual solid block directly beneath it, not just "not solid/lava
+ * itself". Without this, an empty column of void air is never solid or lava either, so a death
+ * far below the world would pass the very first check and never be relocated at all - which is
+ * exactly the bug this requirement exists to close.</p>
  */
 class SafeLocationFinderTest {
 
     private static PlacementSettings settings(int minY, int maxY) {
-        return new PlacementSettings(true, true, true, true, 125, 5, 16, minY, maxY, true);
+        return new PlacementSettings(true, true, true, true, 125, true, 5, 16, minY, maxY, true);
     }
 
     @Test
-    void safeDeathSpotIsNotRelocated() {
+    void safeDeathSpotOnSolidGroundIsNotRelocated() {
         FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SAFE);
+        probe.set(0, 63, 0, ProbeResult.SOLID); // the ground the player is standing on
 
         SafeLocationFinder.Result result = SafeLocationFinder.find(probe, 0, 64, 0, settings(-64, 319));
 
+        assertTrue(result.found());
         assertFalse(result.relocated());
         assertEquals(0, result.x());
         assertEquals(64, result.y());
@@ -33,49 +41,63 @@ class SafeLocationFinderTest {
     }
 
     @Test
-    void lavaAtDeathSpotMovesUpToTheNextSafeBlock() {
-        FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SAFE);
+    void lavaAtDeathSpotMovesToTheNearestGroundedSafeSpot() {
+        // solid rock everywhere by default; a lava pocket at the death column, and a genuine
+        // 2-tall air pocket standing on solid ground one column over.
+        FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SOLID);
         probe.set(0, 64, 0, ProbeResult.HAZARD);
+        probe.set(1, 65, 0, ProbeResult.SAFE);
+        probe.set(1, 66, 0, ProbeResult.SAFE);
+        // (1, 64, 0) stays SOLID via the fill - that's the ground supporting (1, 65, 0)
 
         SafeLocationFinder.Result result = SafeLocationFinder.find(probe, 0, 64, 0, settings(-64, 319));
 
+        assertTrue(result.found());
         assertTrue(result.relocated());
+        assertEquals(1, result.x());
         assertEquals(65, result.y());
+        assertEquals(0, result.z());
     }
 
     @Test
-    void voidDeathIsClampedToMinYAndNeedsNoFurtherSearchWhenThatSpotIsSafe() {
-        // dying below the world's min Y is handled "for free" by the pre-clamp - this shows the
-        // clamped spot getting accepted on the very first probe, with no relocation flagged
-        // (LocationUtils.clampLocation already performs this exact clamp independently too).
+    void pureVoidWithNoGroundAnywhereIsNotFound() {
+        // an entirely empty column (and everything around it, within budget) - nothing is ever
+        // solid or lava, so without a ground-support requirement this would wrongly pass
+        // instantly. This is what a real void death looks like; DeathListener's spawn-point
+        // fallback (not exercised at this unit level) is what actually rescues it in-game.
         FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SAFE);
 
         SafeLocationFinder.Result result = SafeLocationFinder.find(probe, 0, -500, 0, settings(-64, 319));
 
-        assertEquals(-64, result.y());
+        assertFalse(result.found());
         assertFalse(result.relocated());
-        assertEquals(1, result.probes());
     }
 
     @Test
-    void buriedInStoneFindsTheNearestAirPocketAbove() {
+    void buriedInStoneFindsTheNearestGroundedAirPocketAbove() {
         FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SOLID);
         probe.set(0, 70, 0, ProbeResult.SAFE);
         probe.set(0, 71, 0, ProbeResult.SAFE);
+        // (0, 69, 0) stays SOLID via the fill - ground support for (0, 70, 0)
 
         SafeLocationFinder.Result result = SafeLocationFinder.find(probe, 0, 64, 0, settings(-64, 319));
 
+        assertTrue(result.found());
         assertTrue(result.relocated());
         assertEquals(70, result.y());
     }
 
     @Test
-    void netherRoofIsAvoidedEvenWhenTheBlocksThereAreOtherwiseSafe() {
-        FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SAFE);
-        PlacementSettings netherSettings = new PlacementSettings(true, true, true, true, 125, 0, 10, 0, 255, true);
+    void netherRoofIsAvoidedEvenWhenGroundedSpaceThereIsOtherwiseSafe() {
+        FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SOLID);
+        probe.set(0, 122, 0, ProbeResult.SAFE);
+        probe.set(0, 123, 0, ProbeResult.SAFE);
+        // (0, 121, 0) stays SOLID via the fill - ground support for (0, 122, 0)
 
+        PlacementSettings netherSettings = new PlacementSettings(true, true, true, true, 125, true, 0, 10, 0, 255, true);
         SafeLocationFinder.Result result = SafeLocationFinder.find(probe, 0, 130, 0, netherSettings);
 
+        assertTrue(result.found());
         assertTrue(result.relocated());
         assertTrue(result.y() < 125, "expected a y below the nether roof, was " + result.y());
     }
@@ -87,12 +109,13 @@ class SafeLocationFinderTest {
         // search must skip straight past it rather than "finding" it or crashing.
         probe.set(0, 70, 0, ProbeResult.UNLOADED);
         probe.set(0, 71, 0, ProbeResult.UNLOADED);
-        // the next genuinely safe pocket, further away.
+        // the next genuinely safe, grounded pocket, further away.
         probe.set(0, 75, 0, ProbeResult.SAFE);
         probe.set(0, 76, 0, ProbeResult.SAFE);
 
         SafeLocationFinder.Result result = SafeLocationFinder.find(probe, 0, 64, 0, settings(-64, 319));
 
+        assertTrue(result.found());
         assertTrue(result.relocated());
         assertEquals(75, result.y());
         assertTrue(probe.wasProbed(0, 70, 0), "the unloaded column should still have been consulted, just not selected");
@@ -100,13 +123,14 @@ class SafeLocationFinderTest {
 
     @Test
     void searchNeverExceedsTheConfiguredProbeBudget() {
-        FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SOLID); // nothing is ever safe
+        FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SOLID); // feet are always solid: nothing is ever standable
         int radius = 2;
         int verticalDistance = 2;
-        PlacementSettings tight = new PlacementSettings(true, true, true, false, 125, radius, verticalDistance, -64, 319, true);
+        PlacementSettings tight = new PlacementSettings(true, true, true, false, 125, true, radius, verticalDistance, -64, 319, true);
 
         SafeLocationFinder.Result result = SafeLocationFinder.find(probe, 0, 64, 0, tight);
 
+        assertFalse(result.found());
         assertFalse(result.relocated());
         int perColumn = 1 + 2 * verticalDistance;
         int maxExpectedProbes = perColumn * (1 + 4 * radius * (radius + 1));
@@ -116,7 +140,7 @@ class SafeLocationFinderTest {
 
     @Test
     void horizontalRadiusIsHardCappedRegardlessOfConfig() {
-        PlacementSettings overshoot = new PlacementSettings(true, true, true, false, 125, 999, 0, -64, 319, true);
+        PlacementSettings overshoot = new PlacementSettings(true, true, true, false, 125, true, 999, 0, -64, 319, true);
         assertEquals(PlacementSettings.HARD_RADIUS_CAP, overshoot.maxHorizontalRadius());
     }
 
@@ -145,7 +169,10 @@ class SafeLocationFinderTest {
         }
 
         private static long key(int x, int y, int z) {
-            return (((long) x & 0x3FFFFFFL) << 38) | (((long) (y + 4096) & 0x1FFFL) << 26) | ((long) z & 0x3FFFFFFL);
+            // non-overlapping bit ranges: z[0..20], y[21..33], x[34..54] - the previous packing
+            // shifted x by 38 while y's 13-bit field (shifted by 26) extended up to bit 38 too,
+            // colliding for any (x, y) pair where x's low bit and y's top bit were both set.
+            return (((long) x & 0x1FFFFFL) << 34) | (((long) (y + 4096) & 0x1FFFL) << 21) | ((long) z & 0x1FFFFFL);
         }
     }
 }
