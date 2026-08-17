@@ -11,6 +11,7 @@
     <properties>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <junit.version>5.11.4</junit.version>
     </properties>
 
     <build>
@@ -26,6 +27,11 @@
                         <arg>-parameters</arg>
                     </compilerArgs>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.2</version>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -59,9 +65,21 @@
             </plugin>
         </plugins>
         <resources>
+            <!-- only plugin.yml needs ${project.version} substitution; filtering the whole -->
+            <!-- resources directory would corrupt ${...}-looking text in config/sql resources -->
             <resource>
                 <directory>src/main/resources</directory>
                 <filtering>true</filtering>
+                <includes>
+                    <include>plugin.yml</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>plugin.yml</exclude>
+                </excludes>
             </resource>
         </resources>
     </build>
@@ -110,6 +128,20 @@
             <artifactId>bstats-bukkit</artifactId>
             <version>3.2.1</version>
             <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- test-only: exercises SqlGraveStorage against jdbc:h2:mem: without needing a live server.
+             The runtime driver used in production is fetched by AxAPI's dependency loader instead. -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>2.3.232</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

@@ -9,6 +9,9 @@ import static com.artillexstudios.axgraves.AxGraves.CONFIG;
 
 public class LocationUtils {
 
+    public record HeightLimits(double min, double max) {
+    }
+
     @NotNull
     public static Location getCenterOf(@NotNull Location location, boolean keepYaw, boolean keepPitch) {
         Location loc = location.getBlock().getLocation().add(0.5, 0.5, 0.5);
@@ -21,25 +24,23 @@ public class LocationUtils {
         return Math.round(x / 90f) * 90;
     }
 
-    public static void clampLocation(Location location) {
-        Section section = CONFIG.getSection("spawn-height-limits." + location.getWorld().getName());
-        double min, max;
+    /** Configured (or dimension-default) vertical bounds for {@code world}, shared by {@link #clampLocation} and grave safe-placement. */
+    @NotNull
+    public static HeightLimits getHeightLimits(@NotNull World world) {
+        Section section = CONFIG.getSection("spawn-height-limits." + world.getName());
         if (section != null) {
-            min = section.getDouble("min");
-            max = section.getDouble("max");
-        } else {
-            switch (location.getWorld().getEnvironment()) {
-                case NETHER, THE_END -> {
-                    min = 0;
-                    max = 255;
-                }
-                default -> {
-                    min = -64;
-                    max = 319;
-                }
-            }
+            return new HeightLimits(section.getDouble("min"), section.getDouble("max"));
         }
-        location.setY(Math.clamp(location.getY(), min, max));
+
+        return switch (world.getEnvironment()) {
+            case NETHER, THE_END -> new HeightLimits(0, 255);
+            default -> new HeightLimits(-64, 319);
+        };
+    }
+
+    public static void clampLocation(@NotNull Location location) {
+        HeightLimits limits = getHeightLimits(location.getWorld());
+        location.setY(Math.clamp(location.getY(), limits.min(), limits.max()));
     }
 
     @NotNull

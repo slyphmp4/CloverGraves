@@ -21,3 +21,16 @@ permissions:
     default: true
   axgraves.limit.1:
     default: false
+  # already referenced in code prior to this release (grave admin bypass, update-notify
+  # broadcast) but was never declared here - permission-plugin default-grant logic for
+  # them was silently broken until now.
+  axgraves.admin:
+    default: op
+  axgraves.update-notify:
+    default: op
+  axgraves.protection.bypass:
+    default: op
+  axgraves.history:
+    default: op
+  axgraves.restore:
+    default: op

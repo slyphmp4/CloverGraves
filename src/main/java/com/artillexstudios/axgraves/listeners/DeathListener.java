@@ -6,9 +6,16 @@ import com.artillexstudios.axgraves.api.events.GravePreSpawnEvent;
 import com.artillexstudios.axgraves.api.events.GraveSpawnEvent;
 import com.artillexstudios.axgraves.grave.Grave;
 import com.artillexstudios.axgraves.grave.SpawnedGraves;
+import com.artillexstudios.axgraves.grave.placement.BlockProbe;
+import com.artillexstudios.axgraves.grave.placement.BukkitBlockProbe;
+import com.artillexstudios.axgraves.grave.placement.PlacementSettings;
+import com.artillexstudios.axgraves.grave.placement.SafeLocationFinder;
 import com.artillexstudios.axgraves.utils.ExperienceUtils;
+import com.artillexstudios.axgraves.utils.InventoryOrderSnapshot;
+import com.artillexstudios.axgraves.utils.LocationUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -19,8 +26,10 @@ import org.bukkit.plugin.EventExecutor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static com.artillexstudios.axgraves.AxGraves.CONFIG;
+import static com.artillexstudios.axgraves.AxGraves.MESSAGEUTILS;
 
 public class DeathListener implements Listener {
     private static List<String> disabledWorlds;
@@ -100,6 +109,13 @@ public class DeathListener implements Listener {
             return;
         }
 
+        relocateIfUnsafe(location, player, debug);
+
+        // captured *before* anything below clears the player's inventory, so `grave-item-order`
+        // still has real armor/hand/offhand slots to prioritize even when override-keep-inventory
+        // wipes the live inventory a few lines down.
+        InventoryOrderSnapshot orderSnapshot = InventoryOrderSnapshot.capture(player.getInventory());
+
         if (debug) {
             LogUtils.debug("[{}] storeItems: {} - getKeepInventory: {} - overrideKeepInventory: {}", player.getName(), storeItems, event.getKeepInventory(), overrideKeepInventory);
             LogUtils.debug("[{}] storeXP: {} - getKeepLevel: {} - overrideKeepLevel: {}", player.getName(), storeXP, event.getKeepLevel(), overrideKeepLevel);
@@ -126,18 +142,20 @@ public class DeathListener implements Listener {
 
         int xp = 0;
         if (storeXP) {
-            boolean store = false;
-            if (!event.getKeepLevel()) {
-                store = true;
-            } else if (overrideKeepLevel) {
-                store = true;
-                player.setLevel(0);
-                player.setTotalExperience(0);
-            }
+            boolean store = !event.getKeepLevel() || overrideKeepLevel;
 
             if (store) {
+                // read the XP *before* zeroing the player's level - the old code zeroed level
+                // first and then computed getExp() off the already-zeroed level, which returns
+                // at most ~7 xp instead of the player's real total for anyone at level > 0.
                 xp = Math.round(ExperienceUtils.getExp(player) * xpKeepPercentage);
                 event.setDroppedExp(0);
+
+                if (event.getKeepLevel() && overrideKeepLevel) {
+                    player.setLevel(0);
+                    player.setExp(0f); // also reset the progress bar - setTotalExperience(0) alone leaves it partially filled
+                    player.setTotalExperience(0);
+                }
             }
             if (debug) LogUtils.debug("[{}] store: {} - xp: {}", player.getName(), store, xp);
         }
@@ -146,11 +164,78 @@ public class DeathListener implements Listener {
             if (debug) LogUtils.debug("[{}] return: drops empty and xp is 0", player.getName());
             return;
         }
-        Grave grave = new Grave(location, player, drops, xp, System.currentTimeMillis());
-        SpawnedGraves.addGrave(grave);
+
+        Grave grave;
+        try {
+            grave = new Grave(location, player, drops, xp, System.currentTimeMillis(), orderSnapshot);
+            SpawnedGraves.addGrave(grave);
+        } catch (Exception ex) {
+            // items/xp were already taken from the player above; if grave construction itself
+            // throws (bad config, oversized inventory, ...) they must be handed back rather than
+            // vanishing - this used to have no try/catch at all, so any exception here silently
+            // wiped the player's entire inventory and xp.
+            LogUtils.error("failed to create a grave for {} - restoring their items/xp instead of losing them", ex, player.getName());
+            restoreOnFailure(player, drops, xp);
+            return;
+        }
+
         if (debug) LogUtils.debug("[{}] created and added grave", player.getName());
 
         final GraveSpawnEvent graveSpawnEvent = new GraveSpawnEvent(player, grave);
         Bukkit.getPluginManager().callEvent(graveSpawnEvent);
+    }
+
+    private static void restoreOnFailure(Player player, List<ItemStack> drops, int xp) {
+        for (ItemStack it : drops) {
+            if (it == null || it.getType().isAir()) continue;
+            for (ItemStack extra : player.getInventory().addItem(it).values()) {
+                player.getWorld().dropItem(player.getLocation(), extra);
+            }
+        }
+        if (xp > 0) {
+            ExperienceUtils.changeExp(player, xp);
+        }
+    }
+
+    /** Feature: relocates the grave if the death spot is void/lava/embedded/above the nether roof. See {@link SafeLocationFinder}. */
+    private static void relocateIfUnsafe(Location location, Player player, boolean debug) {
+        if (!CONFIG.getBoolean("safe-placement.enabled", true)) return;
+
+        World world = location.getWorld();
+        if (world == null) return;
+
+        LocationUtils.HeightLimits limits = LocationUtils.getHeightLimits(world);
+        PlacementSettings settings = new PlacementSettings(
+                true,
+                CONFIG.getBoolean("safe-placement.avoid-lava", true),
+                CONFIG.getBoolean("safe-placement.avoid-solid", true),
+                CONFIG.getBoolean("safe-placement.avoid-nether-roof", true),
+                CONFIG.getInt("safe-placement.nether-roof-y", 125),
+                CONFIG.getInt("safe-placement.max-horizontal-radius", 5),
+                CONFIG.getInt("safe-placement.max-vertical-distance", 16),
+                (int) limits.min(),
+                (int) limits.max(),
+                CONFIG.getBoolean("safe-placement.notify-owner", true)
+        );
+
+        BlockProbe probe = new BukkitBlockProbe(world);
+        SafeLocationFinder.Result result = SafeLocationFinder.find(probe, location.getBlockX(), location.getBlockY(), location.getBlockZ(), settings);
+        if (!result.relocated()) return;
+
+        location.setX(result.x() + 0.5);
+        location.setY(result.y());
+        location.setZ(result.z() + 0.5);
+
+        if (debug) {
+            LogUtils.debug("[{}] grave relocated to {},{},{} ({} probes)", player.getName(), result.x(), result.y(), result.z(), result.probes());
+        }
+
+        if (settings.notifyOwner()) {
+            MESSAGEUTILS.sendLang(player, "grave-relocated", Map.of(
+                    "%world%", LocationUtils.getWorldName(world),
+                    "%x%", "" + result.x(),
+                    "%y%", "" + result.y(),
+                    "%z%", "" + result.z()));
+        }
     }
 }

@@ -49,6 +49,32 @@ auto-rotation:
 # false: everyone can open the grave
 interact-only-own: false
 
+# how close (in blocks) a player must be to interact with a grave, or to keep its GUI open
+interact-radius: 7.0
+
+# temporary owner-only protection after death, separate from interact-only-own above.
+# blocks both looting and xp pickup by anyone but the owner (and axgraves.admin /
+# axgraves.protection.bypass) until it expires. 0 disables it, -1 makes it permanent.
+protection:
+  seconds: 30
+  # minimum time between repeated "this grave is protected" messages to the same player
+  message-cooldown-seconds: 3
+
+# relocates a grave if the death spot would be unusable. never force-loads chunks, so it
+# only searches through blocks that are already loaded.
+safe-placement:
+  enabled: true
+  avoid-lava: true
+  avoid-solid: true
+  avoid-nether-roof: true
+  # y coordinate at/above which a nether location counts as "the roof"
+  nether-roof-y: 125
+  # hard-capped to 16 regardless of this value
+  max-horizontal-radius: 5
+  max-vertical-distance: 16
+  # tell the owner where their grave ended up if it was moved
+  notify-owner: true
+
 # should the player lose any xp on death?
 # this is a percentage, so 0.5 would be 50% xp
 xp-keep-percentage: 1.0
@@ -84,9 +110,36 @@ despawn-when-empty: true
 save-graves:
   # should graves be saved if the server stops?
   enabled: true
-  # how often should the graves be saved?
-  # set to -1 to make it only save on shutdown (it might not save if there is a crash)
+  # deprecated: use storage.flush-interval-seconds instead. still read as a fallback if
+  # storage.flush-interval-seconds is absent.
   auto-save-seconds: 30
+
+storage:
+  # H2 (default, embedded, no setup needed), SQLITE (embedded) or MYSQL.
+  # the driver for your chosen type is downloaded automatically on first start.
+  # if that fails (e.g. an air-gapped server), the plugin falls back to a JSON file
+  # automatically - note the JSON fallback does not support grave history/restore.
+  type: H2
+  table-prefix: "axgraves_"
+  # only used when type is MYSQL
+  mysql:
+    address: 127.0.0.1
+    port: 3306
+    database: axgraves
+    username: root
+    password: ""
+    pool:
+      maximum-pool-size: 10
+      minimum-idle: 10
+  # how often live graves are persisted, in seconds. -1 = only on shutdown (may not save on a crash)
+  flush-interval-seconds: 15
+
+history:
+  # keep a record of past graves so admins can inspect and restore them (/axgraves history, /axgraves restore)
+  # only takes effect when storage.type is a SQL backend - see storage.type above
+  enabled: true
+  keep-per-player: 5
+  keep-days: 14
 
 # by default every grave will use the player's skull
 # with this setting you can override it
@@ -148,9 +201,9 @@ death-listener-priority: HIGHEST
 
 # settings for holograms displays
 holograms:
-  # set to 00000000 to make it invisible
-  # format (hexadecimal): AARRGGBB
-  background-color: 00000000
+  # set to "00000000" to make it invisible
+  # format (hexadecimal, quoted): AARRGGBB
+  background-color: "00000000"
   # list: left, right, center
   alignment: center
   # list: fixed, vertical, horizontal, center
@@ -172,4 +225,4 @@ update-notifier:
 debug: false
 
 # do not edit
-version: 19
+version: 20

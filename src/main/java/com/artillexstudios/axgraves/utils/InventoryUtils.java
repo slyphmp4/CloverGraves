@@ -1,60 +1,49 @@
 package com.artillexstudios.axgraves.utils;
 
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import static com.artillexstudios.axgraves.AxGraves.CONFIG;
 
 public class InventoryUtils {
+    /** A Bukkit inventory tops out at 6 rows (54 slots); {@link #getRequiredRows(int)} clamps to it. */
+    public static final int MAX_ROWS = 6;
+    public static final int MAX_SLOTS = MAX_ROWS * 9;
 
     @NotNull
-    public static List<ItemStack> reorderInventory(@NotNull PlayerInventory inventory, @NotNull List<ItemStack> keptItems) {
-        final ArrayList<ItemStack> itemsBefore = new ArrayList<>(keptItems);
-        final ItemStack[] items = new ItemStack[itemsBefore.size()];
-        int n = 0;
+    public static List<ItemStack> reorderInventory(@NotNull InventoryOrderSnapshot snapshot, @NotNull List<ItemStack> keptItems) {
+        List<ItemStack> priority = new ArrayList<>();
 
         for (String str : CONFIG.getStringList("grave-item-order")) {
             switch (str) {
                 case "ARMOR" -> {
-                    for (ItemStack it : inventory.getArmorContents()) {
-                        if (!itemsBefore.contains(it)) continue;
-                        items[n] = it;
-                        itemsBefore.remove(it);
-                        n++;
+                    for (ItemStack it : snapshot.armor()) {
+                        if (it != null) priority.add(it);
                     }
                 }
-                case "HAND" -> {
-                    if (!itemsBefore.contains(inventory.getItemInMainHand())) continue;
-                    items[n] = inventory.getItemInMainHand();
-                    itemsBefore.remove(inventory.getItemInMainHand());
-                    n++;
-                }
-                case "OFFHAND" -> {
-                    if (!itemsBefore.contains(inventory.getItemInOffHand())) continue;
-                    items[n] = inventory.getItemInOffHand();
-                    itemsBefore.remove(inventory.getItemInOffHand());
-                    n++;
+                case "HAND" -> priority.add(snapshot.mainHand());
+                case "OFFHAND" -> priority.add(snapshot.offHand());
+                default -> {
                 }
             }
         }
 
-        for (ItemStack it : itemsBefore) {
-            if (!itemsBefore.contains(it)) continue;
-            items[n] = it;
-            n++;
-        }
-
-        return Arrays.asList(items);
+        return ItemOrdering.reorder(keptItems, priority);
     }
 
+    /**
+     * Rows required to fit {@code amount} items, clamped to {@link #MAX_ROWS}. Previously
+     * unclamped: more than 54 stacks (e.g. from another plugin adding drops) made
+     * {@code Bukkit.createInventory} throw {@code IllegalArgumentException} with no
+     * surrounding try/catch, wiping the dying player's entire inventory.
+     */
     public static int getRequiredRows(int amount) {
+        if (amount <= 0) return 1;
         int rows = amount / 9;
         if (amount % 9 != 0) rows++;
-        return Math.max(rows, 1);
+        return Math.min(Math.max(rows, 1), MAX_ROWS);
     }
 }

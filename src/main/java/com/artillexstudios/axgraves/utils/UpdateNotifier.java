@@ -100,11 +100,27 @@ public class UpdateNotifier implements Listener {
 
     public boolean isOutdated(String current) {
         if (latest == null) return false;
+        return isOutdated(latest, current);
+    }
+
+    /**
+     * Pure version comparison, split out so it's unit-testable and so a malformed response body
+     * (an HTML error page, a truncated string, a version with fewer than 3 parts, ...) can never
+     * throw out of the async update-check timer - the previous implementation did unguarded
+     * {@code Integer.parseInt} on both sides with no length check.
+     */
+    static boolean isOutdated(String latest, String current) {
+        if (latest == null || current == null) return false;
+
         String[] parts1 = latest.split("\\.");
         String[] parts2 = current.split("\\.");
+        if (parts1.length < 3 || parts2.length < 3) return false;
+
         for (int i = 0; i < 3; i++) {
-            int num1 = Integer.parseInt(parts1[i]);
-            int num2 = Integer.parseInt(parts2[i]);
+            Integer num1 = parseComponent(parts1[i]);
+            Integer num2 = parseComponent(parts2[i]);
+            if (num1 == null || num2 == null) return false;
+
             if (num1 > num2) {
                 return true;
             } else if (num1 < num2) {
@@ -112,5 +128,13 @@ public class UpdateNotifier implements Listener {
             }
         }
         return false;
+    }
+
+    private static Integer parseComponent(String part) {
+        try {
+            return Integer.parseInt(part.trim());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 }

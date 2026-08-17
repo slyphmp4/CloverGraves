@@ -24,16 +24,20 @@ public class GravePlaceholders {
             return grave.getPlayerName();
         }, false);
 
+        // %xp% and %item% used to read the grave's live state (storedXP / a Bukkit Inventory
+        // scan) from whatever thread AxAPI's hologram tracker happens to update on - reading
+        // GraveSnapshot instead means this never touches Bukkit/NMS objects off their owning
+        // region, matching the rest of the threading fix (see GraveContents).
         PlaceholderHandler.register("xp", handler -> {
             Grave grave = handler.raw(Grave.class);
             if (grave == null) return empty;
-            return String.valueOf(grave.getStoredXP());
+            return String.valueOf(grave.snapshot().storedXP());
         }, false);
 
         PlaceholderHandler.register("item", handler -> {
             Grave grave = handler.raw(Grave.class);
             if (grave == null) return empty;
-            return String.valueOf(grave.countItems());
+            return String.valueOf(grave.snapshot().itemCount());
         }, false);
 
         PlaceholderHandler.register("despawn-time", handler -> {
@@ -44,7 +48,7 @@ public class GravePlaceholders {
         }, false);
 
         PlaceholderHandler.register("grave_count", handler -> {
-            return String.valueOf(SpawnedGraves.getGraves().size());
+            return String.valueOf(SpawnedGraves.count());
         }, true);
 
         PlaceholderHandler.register("grave_limit", handler -> {
