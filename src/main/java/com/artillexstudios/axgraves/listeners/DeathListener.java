@@ -218,12 +218,18 @@ public class DeathListener implements Listener {
                 CONFIG.getBoolean("safe-placement.notify-owner", true)
         );
 
+        // `location` has already been shifted down 0.5 blocks (see the caller) so that it
+        // anchors to the ground block the player was standing ON, not the air block they were
+        // standing IN - that's intentional, it's what makes the grave sit flush with the floor.
+        // The space that actually needs a safety check is one block *above* that anchor: the
+        // ground block itself being solid is expected, not a hazard.
         BlockProbe probe = new BukkitBlockProbe(world);
-        SafeLocationFinder.Result result = SafeLocationFinder.find(probe, location.getBlockX(), location.getBlockY(), location.getBlockZ(), settings);
+        int standingY = location.getBlockY() + 1;
+        SafeLocationFinder.Result result = SafeLocationFinder.find(probe, location.getBlockX(), standingY, location.getBlockZ(), settings);
         if (!result.relocated()) return;
 
         location.setX(result.x() + 0.5);
-        location.setY(result.y());
+        location.setY(result.y() - 1);
         location.setZ(result.z() + 0.5);
 
         if (debug) {
