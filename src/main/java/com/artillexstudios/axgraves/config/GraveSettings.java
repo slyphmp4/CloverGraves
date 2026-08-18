@@ -28,7 +28,7 @@ public record GraveSettings(int despawnTimeSeconds, boolean despawnWhenEmpty, bo
 
     public static void reload(@NotNull Config config) {
         current = new GraveSettings(
-                config.getInt("despawn-time-seconds", 180),
+                config.getInt("despawn-time-seconds", 1800),
                 config.getBoolean("despawn-when-empty", true),
                 config.getBoolean("auto-rotation.enabled", false),
                 config.getFloat("auto-rotation.speed", 10f),

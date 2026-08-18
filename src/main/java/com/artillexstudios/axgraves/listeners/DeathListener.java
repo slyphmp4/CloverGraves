@@ -260,8 +260,8 @@ public class DeathListener implements Listener {
                 CONFIG.getBoolean("safe-placement.avoid-nether-roof", true),
                 CONFIG.getInt("safe-placement.nether-roof-y", 125),
                 CONFIG.getBoolean("safe-placement.require-ground-support", true),
-                CONFIG.getInt("safe-placement.max-horizontal-radius", 5),
-                CONFIG.getInt("safe-placement.max-vertical-distance", 16),
+                CONFIG.getInt("safe-placement.max-horizontal-radius", 16),
+                CONFIG.getInt("safe-placement.max-vertical-distance", 128),
                 (int) limits.min(),
                 (int) limits.max(),
                 CONFIG.getBoolean("safe-placement.notify-owner", true)

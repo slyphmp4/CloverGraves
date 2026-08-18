@@ -3,7 +3,7 @@ prefix: "<gradient:#FF00FF:#DD00FF><b>AxGraves</b></gradient> &7» "
 # how fast should the graves disappear
 # set to -1 to make graves never despawn
 # in seconds
-despawn-time-seconds: 180
+despawn-time-seconds: 1800
 
 # should graves drop all items on the ground when they expire?
 # if false: items will be removed
@@ -74,9 +74,14 @@ safe-placement:
   # solid nor lava), so a death far below the world would never be relocated at all - it would
   # just float in open space. keep this true unless you have a reason not to.
   require-ground-support: true
-  # hard-capped to 16 regardless of this value
-  max-horizontal-radius: 5
-  max-vertical-distance: 16
+  # how far sideways to search for solid ground. hard-capped to 32 regardless of this value.
+  # a larger radius costs more block checks per death, but only when nothing closer is found.
+  max-horizontal-radius: 16
+  # how far up/down to search for solid ground. this is the one that matters most for the
+  # void: a player falling to the bottom of the world can easily be 100+ blocks below the
+  # nearest real terrain, so a small value here just means the local search always fails and
+  # falls through to the world-spawn fallback instead of relocating nearby.
+  max-vertical-distance: 128
   # tell the owner where their grave ended up if it was moved
   notify-owner: true
 

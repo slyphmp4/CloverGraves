@@ -11,7 +11,7 @@ public class GravePlaceholders {
     private static int time;
 
     public static void reload() {
-        time = CONFIG.getInt("despawn-time-seconds", 180);
+        time = CONFIG.getInt("despawn-time-seconds", 1800);
     }
 
     public static void register() {

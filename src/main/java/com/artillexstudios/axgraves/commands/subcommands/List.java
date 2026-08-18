@@ -24,7 +24,7 @@ public enum List {
 
     public void execute(CommandSender sender) {
         boolean found = false;
-        int dTime = CONFIG.getInt("despawn-time-seconds", 180);
+        int dTime = CONFIG.getInt("despawn-time-seconds", 1800);
         for (Grave grave : SpawnedGraves.getGraves()) {
             // skip grave if player doesn't have permission to view others' graves
             if (sender instanceof Player player && !grave.getPlayer().getUniqueId().equals(player.getUniqueId())) {
