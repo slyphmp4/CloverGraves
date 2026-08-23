@@ -10,6 +10,7 @@ import com.artillexstudios.axgraves.grave.placement.BlockProbe;
 import com.artillexstudios.axgraves.grave.placement.BukkitBlockProbe;
 import com.artillexstudios.axgraves.grave.placement.PlacementSettings;
 import com.artillexstudios.axgraves.grave.placement.SafeLocationFinder;
+import com.artillexstudios.axgraves.schedulers.SaveGraves;
 import com.artillexstudios.axgraves.utils.ExperienceUtils;
 import com.artillexstudios.axgraves.utils.InventoryOrderSnapshot;
 import com.artillexstudios.axgraves.utils.LocationUtils;
@@ -170,6 +171,10 @@ public class DeathListener implements Listener {
         try {
             grave = new Grave(location, player, drops, xp, System.currentTimeMillis(), orderSnapshot);
             SpawnedGraves.addGrave(grave);
+            // don't wait for the next periodic flush (up to storage.flush-interval-seconds away)
+            // or the grave's own first tick to persist this - a crash in that window would lose
+            // the grave, and everything in it, with no trace in storage at all.
+            SaveGraves.saveNow(grave);
         } catch (Exception ex) {
             // items/xp were already taken from the player above; if grave construction itself
             // throws (bad config, oversized inventory, ...) they must be handed back rather than

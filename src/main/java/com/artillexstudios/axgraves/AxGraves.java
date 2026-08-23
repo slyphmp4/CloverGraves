@@ -209,8 +209,14 @@ public final class AxGraves extends AxPlugin {
                 continue;
             }
 
-            // make sure the published snapshot reflects the final state before the last flush
-            grave.contents().refreshSnapshot();
+            // make sure the published snapshot reflects the final state before the last flush -
+            // caught individually so one grave with a malformed item can't throw mid-loop and
+            // skip persisting every grave that comes after it in iteration order
+            try {
+                grave.contents().refreshSnapshot();
+            } catch (Exception ex) {
+                LogUtils.error("failed to refresh snapshot for a grave during shutdown - it may not reflect its final state", ex);
+            }
             if (grave.getEntity() != null) grave.getEntity().remove();
             if (grave.getHologram() != null) grave.getHologram().remove();
         }
