@@ -98,7 +98,10 @@ public final class SafeLocationFinder {
     }
 
     private static boolean isSafeColumnSpot(@NotNull BlockProbe probe, int x, int y, int z, @NotNull PlacementSettings settings) {
-        if (settings.avoidNetherRoof() && y >= settings.netherRoofY()) return false;
+        // the "nether roof" only exists in the nether - this used to apply unconditionally, so
+        // any overworld death above y=125 (a mountain peak, a tower, an elytra death) was treated
+        // as unsafe and force-relocated, often far away once the search range was widened.
+        if (settings.avoidNetherRoof() && settings.isNetherWorld() && y >= settings.netherRoofY()) return false;
 
         ProbeResult feet = probe.probe(x, y, z);
         if (!acceptable(feet, settings)) return false;

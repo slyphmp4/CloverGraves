@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SafeLocationFinderTest {
 
     private static PlacementSettings settings(int minY, int maxY) {
-        return new PlacementSettings(true, true, true, true, 125, true, 5, 16, minY, maxY, true);
+        return new PlacementSettings(true, true, true, true, 125, false, true, 5, 16, minY, maxY, true);
     }
 
     @Test
@@ -94,12 +94,29 @@ class SafeLocationFinderTest {
         probe.set(0, 123, 0, ProbeResult.SAFE);
         // (0, 121, 0) stays SOLID via the fill - ground support for (0, 122, 0)
 
-        PlacementSettings netherSettings = new PlacementSettings(true, true, true, true, 125, true, 0, 10, 0, 255, true);
+        PlacementSettings netherSettings = new PlacementSettings(true, true, true, true, 125, true, true, 0, 10, 0, 255, true);
         SafeLocationFinder.Result result = SafeLocationFinder.find(probe, 0, 130, 0, netherSettings);
 
         assertTrue(result.found());
         assertTrue(result.relocated());
         assertTrue(result.y() < 125, "expected a y below the nether roof, was " + result.y());
+    }
+
+    @Test
+    void netherRoofDoesNotApplyOutsideTheNether() {
+        // a mountain peak (or a tower, or an elytra death) well above y=125 in a NON-nether
+        // world - the roof rule must not touch it. Before this was gated on isNetherWorld, this
+        // safe overworld spot was force-relocated on every death above y=125, and once the search
+        // range was widened elsewhere, "relocated" could mean 100+ blocks straight down.
+        FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SAFE);
+        probe.set(0, 199, 0, ProbeResult.SOLID);
+
+        PlacementSettings overworldSettings = new PlacementSettings(true, true, true, true, 125, false, true, 5, 16, -64, 319, true);
+        SafeLocationFinder.Result result = SafeLocationFinder.find(probe, 0, 200, 0, overworldSettings);
+
+        assertTrue(result.found());
+        assertFalse(result.relocated());
+        assertEquals(200, result.y());
     }
 
     @Test
@@ -126,7 +143,7 @@ class SafeLocationFinderTest {
         FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SOLID); // feet are always solid: nothing is ever standable
         int radius = 2;
         int verticalDistance = 2;
-        PlacementSettings tight = new PlacementSettings(true, true, true, false, 125, true, radius, verticalDistance, -64, 319, true);
+        PlacementSettings tight = new PlacementSettings(true, true, true, false, 125, false, true, radius, verticalDistance, -64, 319, true);
 
         SafeLocationFinder.Result result = SafeLocationFinder.find(probe, 0, 64, 0, tight);
 
@@ -140,7 +157,7 @@ class SafeLocationFinderTest {
 
     @Test
     void horizontalRadiusIsHardCappedRegardlessOfConfig() {
-        PlacementSettings overshoot = new PlacementSettings(true, true, true, false, 125, true, 999, 0, -64, 319, true);
+        PlacementSettings overshoot = new PlacementSettings(true, true, true, false, 125, false, true, 999, 0, -64, 319, true);
         assertEquals(PlacementSettings.HARD_RADIUS_CAP, overshoot.maxHorizontalRadius());
     }
 

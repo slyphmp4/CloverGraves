@@ -13,8 +13,10 @@ permissions:
     default: true
   axgraves.list.other:
     default: op
+  # teleporting to your *own* grave is a normal player feature (that's the whole point of the
+  # cooldown/warmup on it) - tp.bypass (arbitrary coordinates, any player's grave) stays op-only
   axgraves.tp:
-    default: op
+    default: true
   axgraves.tp.bypass:
     default: op
   axgraves.allowgraves:
