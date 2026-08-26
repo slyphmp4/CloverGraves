@@ -162,6 +162,18 @@ teleport:
   cancel-on-move: true
   # cancel the pending teleport if the player takes damage during the countdown
   cancel-on-damage: true
+  # charge the player for teleporting to their grave. 0 disables this entirely (also skips the
+  # confirmation step below). requires a Vault-compatible economy plugin - if none is installed,
+  # this is treated as free rather than blocking the command (see EconomyHook).
+  cost: 0
+  # shown before the amount, e.g. "100" -> "₱100". purely cosmetic - Vault's own currency
+  # formatting/name is not used, so this always matches regardless of economy plugin.
+  currency-symbol: "₱"
+  # when cost is above 0, the first /tp only checks the player can afford it and asks them to run
+  # the command again within this many seconds to confirm - it does not charge or start the
+  # countdown yet. the actual charge happens right before the teleport, so a countdown cancelled
+  # by moving/damage never costs anything.
+  confirmation-timeout-seconds: 15
 
 # by default every grave will use the player's skull
 # with this setting you can override it
@@ -248,4 +260,4 @@ update-notifier:
 debug: false
 
 # do not edit
-version: 21
+version: 22

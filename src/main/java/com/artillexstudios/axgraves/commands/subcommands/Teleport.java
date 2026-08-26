@@ -5,6 +5,7 @@ import com.artillexstudios.axapi.utils.PaperUtils;
 import com.artillexstudios.axapi.utils.StringUtils;
 import com.artillexstudios.axgraves.grave.Grave;
 import com.artillexstudios.axgraves.grave.SpawnedGraves;
+import com.artillexstudios.axgraves.utils.EconomyHook;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -25,6 +26,12 @@ import static com.artillexstudios.axgraves.AxGraves.MESSAGEUTILS;
  * (see {@link com.artillexstudios.axgraves.listeners.TeleportCancelListener}). A successful
  * teleport starts a cooldown ({@code teleport.cooldown-seconds}, default 60) before the command
  * can be used again - a cancelled warmup does not consume it.
+ *
+ * <p>If {@code teleport.cost} is above 0, the first invocation only checks the player can afford
+ * it and prompts them to run the command again within {@code teleport.confirmation-timeout-seconds}
+ * to confirm - it does not charge or start the warmup yet. The actual charge happens at the very
+ * end, right before the teleport itself, so a warmup that gets cancelled by moving/taking damage
+ * never costs anything.</p>
  */
 public enum Teleport {
     INSTANCE;
@@ -47,10 +54,36 @@ public enum Teleport {
             return;
         }
 
+        double cost = CONFIG.getDouble("teleport.cost", 0);
+        String symbol = CONFIG.getString("teleport.currency-symbol", "$");
+
+        if (cost > 0 && !TeleportConfirmations.consumeIfConfirmed(uuid)) {
+            promptConfirmation(sender, uuid, cost, symbol);
+            return;
+        }
+
+        startWarmup(sender, uuid, target, cost, symbol);
+    }
+
+    private void promptConfirmation(Player sender, UUID uuid, double cost, String symbol) {
+        if (!EconomyHook.has(sender, cost)) {
+            MESSAGEUTILS.sendLang(sender, "teleport.cost-insufficient", Map.of(
+                    "%cost%", EconomyHook.format(cost, symbol),
+                    "%balance%", EconomyHook.format(EconomyHook.balance(sender), symbol)));
+            return;
+        }
+
+        int confirmSeconds = Math.max(CONFIG.getInt("teleport.confirmation-timeout-seconds", 15), 1);
+        TeleportConfirmations.markConfirmable(uuid, confirmSeconds);
+        MESSAGEUTILS.sendLang(sender, "teleport.cost-confirm", Map.of(
+                "%cost%", EconomyHook.format(cost, symbol),
+                "%seconds%", String.valueOf(confirmSeconds)));
+    }
+
+    private void startWarmup(Player sender, UUID uuid, Location target, double cost, String symbol) {
         int warmupSeconds = Math.max(CONFIG.getInt("teleport.warmup-seconds", 5), 0);
         if (warmupSeconds == 0) {
-            TeleportWarmups.markUsed(uuid);
-            PaperUtils.teleportAsync(sender, target);
+            completeTeleport(sender, uuid, target, cost, symbol);
             return;
         }
 
@@ -70,14 +103,30 @@ public enum Teleport {
 
                 if (isLast) {
                     TeleportWarmups.clear(uuid);
-                    TeleportWarmups.markUsed(uuid);
-                    MESSAGEUTILS.sendLang(sender, "teleport.warmup-complete");
-                    PaperUtils.teleportAsync(sender, target);
+                    completeTeleport(sender, uuid, target, cost, symbol);
                 } else {
                     MESSAGEUTILS.sendLang(sender, "teleport.countdown", Map.of("%seconds%", String.valueOf(secondsLeft)));
                 }
             }, () -> TeleportWarmups.clear(uuid), second * 20L);
         }
+    }
+
+    private void completeTeleport(Player sender, UUID uuid, Location target, double cost, String symbol) {
+        if (cost > 0) {
+            // re-checked here, not just at confirmation time - the player could have spent the
+            // money elsewhere during the confirmation window or the warmup countdown.
+            if (!EconomyHook.has(sender, cost) || !EconomyHook.withdraw(sender, cost)) {
+                MESSAGEUTILS.sendLang(sender, "teleport.cost-insufficient", Map.of(
+                        "%cost%", EconomyHook.format(cost, symbol),
+                        "%balance%", EconomyHook.format(EconomyHook.balance(sender), symbol)));
+                return;
+            }
+            MESSAGEUTILS.sendLang(sender, "teleport.cost-charged", Map.of("%cost%", EconomyHook.format(cost, symbol)));
+        }
+
+        TeleportWarmups.markUsed(uuid);
+        MESSAGEUTILS.sendLang(sender, "teleport.warmup-complete");
+        PaperUtils.teleportAsync(sender, target);
     }
 
     @Nullable

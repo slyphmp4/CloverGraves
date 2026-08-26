@@ -41,6 +41,9 @@ teleport:
   countdown: "&#FFAAFF%seconds%..."
   warmup-complete: "&#33FF33Teleporting now!"
   cancelled: "&#FF3333Teleport cancelled!"
+  cost-confirm: "&#FFAAFFTeleporting to your grave costs &f%cost%&#FFAAFF. Run the command again within &f%seconds%s&#FFAAFF to confirm."
+  cost-insufficient: "&#FF3333You need &f%cost%&#FF3333 to teleport to your grave, but you only have &f%balance%&#FF3333."
+  cost-charged: "&#FFAAFFCharged &f%cost%&#FFAAFF for the teleport."
 
 history:
   header: "&#FF00FF&l=== GRAVE HISTORY: %player% ==="
@@ -73,4 +76,4 @@ commands:
 update-notifier: "&#FF88FFThere is a new version of AxGraves available! &#DDDDDD(&#FFFFFFcurrent: &#FF0000%current% &#DDDDDD| &#FFFFFFlatest: &#00FF00%latest%&#DDDDDD)"
 
 # do not edit
-version: 8
+version: 9

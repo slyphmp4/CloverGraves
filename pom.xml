@@ -123,6 +123,21 @@
             <version>2.0.17</version>
             <scope>provided</scope>
         </dependency>
+        <!-- compile-only: the actual Economy implementation is provided by whatever Vault-compatible
+             economy plugin is installed on the server, resolved at runtime via Bukkit's ServicesManager
+             (see EconomyHook). Not shaded - Vault's own classes are already on the server classpath. -->
+        <dependency>
+            <groupId>com.github.MilkBowl</groupId>
+            <artifactId>VaultAPI</artifactId>
+            <version>1.7</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
         <dependency>
             <groupId>org.bstats</groupId>
             <artifactId>bstats-bukkit</artifactId>
