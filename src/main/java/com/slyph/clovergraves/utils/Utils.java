@@ -1,31 +1,60 @@
 package com.slyph.clovergraves.utils;
 
-import com.artillexstudios.axapi.nms.wrapper.ServerPlayerWrapper;
-import com.artillexstudios.axapi.utils.ItemBuilder;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.profile.PlayerProfile;
+import org.bukkit.profile.PlayerTextures;
 import org.jetbrains.annotations.NotNull;
+
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static com.slyph.clovergraves.AxGraves.CONFIG;
 
 public class Utils {
+    private static final Pattern TEXTURE_URL = Pattern.compile("\\\"url\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
     @NotNull
     public static ItemStack getPlayerHead(@NotNull OfflinePlayer player) {
-        ItemBuilder builder = ItemBuilder.create(Material.PLAYER_HEAD);
+        ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+        SkullMeta meta = (SkullMeta) head.getItemMeta();
 
-        String texture = null;
         if (CONFIG.getBoolean("custom-grave-skull.enabled", false)) {
-            texture = CONFIG.getString("custom-grave-skull.base64");
-        } else if (player.getPlayer() != null) {
-            ServerPlayerWrapper wrapper = ServerPlayerWrapper.wrap(player);
-            texture = wrapper.textures().texture();
+            String base64 = CONFIG.getString("custom-grave-skull.base64");
+            if (applyBase64Texture(meta, base64)) {
+                head.setItemMeta(meta);
+                return head;
+            }
         }
 
-        if (texture != null) builder.setTextureValue(texture);
+        meta.setOwningPlayer(player);
+        head.setItemMeta(meta);
+        return head;
+    }
 
-        return builder.get();
+    private static boolean applyBase64Texture(@NotNull SkullMeta meta, String base64) {
+        if (base64 == null || base64.isBlank()) return false;
+        try {
+            String json = new String(Base64.getDecoder().decode(base64), StandardCharsets.UTF_8);
+            Matcher matcher = TEXTURE_URL.matcher(json);
+            if (!matcher.find()) return false;
+
+            PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID());
+            PlayerTextures textures = profile.getTextures();
+            textures.setSkin(URI.create(matcher.group(1)).toURL());
+            profile.setTextures(textures);
+            meta.setOwnerProfile(profile);
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     public static boolean isHelmet(Material material) {
