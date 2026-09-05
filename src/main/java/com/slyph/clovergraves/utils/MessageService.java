@@ -1,57 +1,77 @@
 package com.slyph.clovergraves.utils;
 
-import com.artillexstudios.axapi.config.Config;
-import com.artillexstudios.axapi.utils.StringUtils;
+import com.slyph.clovergraves.config.CloverConfig;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.command.CommandSender;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
 import java.util.Map;
 
 public final class MessageService {
-    private final Config messages;
-    private final Config prefixConfig;
+    private final CloverConfig messages;
+    private final CloverConfig prefixConfig;
     private final String prefixRoute;
 
-    public MessageService(@NotNull Config messages, @NotNull String prefixRoute, @NotNull Config prefixConfig) {
+    public MessageService(@NotNull CloverConfig messages, @NotNull String prefixRoute, @NotNull CloverConfig prefixConfig) {
         this.messages = messages;
         this.prefixRoute = prefixRoute;
         this.prefixConfig = prefixConfig;
     }
 
     public void sendLang(@NotNull CommandSender sender, @NotNull String route) {
-        sendLang(sender, route, TagResolver.empty());
+        sendLang(sender, route, Map.of());
     }
 
     public void sendLang(@NotNull CommandSender sender, @NotNull String route, TagResolver... resolvers) {
-        String message = messages.getString(route);
-        if (message == null || message.isEmpty()) return;
-        sendFormatted(sender, prefix() + message, resolvers);
+        List<String> lines = messages.getLines(route);
+        for (String line : lines) {
+            if (isSpacer(line)) {
+                sender.sendMessage(Component.empty());
+                continue;
+            }
+            sender.sendMessage(TextFormatter.format(prefix() + line, resolvers));
+        }
     }
 
     public void sendLang(@NotNull CommandSender sender, @NotNull String route, @NotNull Map<String, String> replacements) {
-        String message = messages.getString(route);
-        if (message == null || message.isEmpty()) return;
-
-        String formatted = prefix() + message;
-        for (Map.Entry<String, String> entry : replacements.entrySet()) {
-            formatted = formatted.replace(entry.getKey(), entry.getValue());
+        List<String> lines = messages.getLines(route);
+        for (String line : lines) {
+            if (isSpacer(line)) {
+                sender.sendMessage(Component.empty());
+                continue;
+            }
+            sender.sendMessage(TextFormatter.format(prefix() + TextFormatter.replace(line, replacements)));
         }
-        sendFormatted(sender, formatted);
     }
 
     public void sendFormatted(@NotNull CommandSender sender, String message) {
         if (message == null || message.isEmpty()) return;
-        sender.sendMessage(StringUtils.formatToString(message));
+        sender.sendMessage(TextFormatter.format(message));
     }
 
     public void sendFormatted(@NotNull CommandSender sender, String message, TagResolver... resolvers) {
         if (message == null || message.isEmpty()) return;
-        sender.sendMessage(StringUtils.formatToString(message, resolvers));
+        sender.sendMessage(TextFormatter.format(message, resolvers));
+    }
+
+    @NotNull
+    public Component component(@NotNull String route, @NotNull Map<String, String> replacements) {
+        String line = messages.getFirstLine(route, "");
+        return TextFormatter.format(prefix() + TextFormatter.replace(line, replacements));
+    }
+
+    @NotNull
+    public String raw(@NotNull String route, @NotNull String def) {
+        return messages.getFirstLine(route, def);
+    }
+
+    private boolean isSpacer(String line) {
+        return line.isBlank() || line.equalsIgnoreCase("&7");
     }
 
     private String prefix() {
-        String prefix = prefixConfig.getString(prefixRoute);
-        return prefix == null ? "" : prefix;
+        return prefixConfig.getString(prefixRoute, "");
     }
 }

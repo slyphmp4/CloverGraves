@@ -3,8 +3,11 @@ version: '${version}'
 main: com.slyph.clovergraves.AxGraves
 api-version: '1.16'
 authors: [slyph]
-folia-supported: true
-softdepend: [Vault]
+softdepend: [Vault, PlaceholderAPI]
+
+commands:
+  clovergraves:
+    aliases: [axgraves, axgrave, graves, grave, bibingka]
 
 permissions:
   axgraves.help:

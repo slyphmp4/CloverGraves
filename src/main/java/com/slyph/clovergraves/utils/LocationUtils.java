@@ -1,14 +1,13 @@
 package com.slyph.clovergraves.utils;
 
-import com.artillexstudios.axapi.libs.boostedyaml.block.implementation.Section;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.configuration.ConfigurationSection;
 import org.jetbrains.annotations.NotNull;
 
 import static com.slyph.clovergraves.AxGraves.CONFIG;
 
 public class LocationUtils {
-
     public record HeightLimits(double min, double max) {
     }
 
@@ -24,10 +23,9 @@ public class LocationUtils {
         return Math.round(x / 90f) * 90;
     }
 
-    /** Configured (or dimension-default) vertical bounds for {@code world}, shared by {@link #clampLocation} and grave safe-placement. */
     @NotNull
     public static HeightLimits getHeightLimits(@NotNull World world) {
-        Section section = CONFIG.getSection("spawn-height-limits." + world.getName());
+        ConfigurationSection section = CONFIG.getSection("spawn-height-limits." + world.getName());
         if (section != null) {
             return new HeightLimits(section.getDouble("min"), section.getDouble("max"));
         }
@@ -39,7 +37,9 @@ public class LocationUtils {
     }
 
     public static void clampLocation(@NotNull Location location) {
-        HeightLimits limits = getHeightLimits(location.getWorld());
+        World world = location.getWorld();
+        if (world == null) return;
+        HeightLimits limits = getHeightLimits(world);
         location.setY(Math.clamp(location.getY(), limits.min(), limits.max()));
     }
 

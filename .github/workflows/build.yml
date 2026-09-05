@@ -13,8 +13,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
+
     steps:
       - uses: actions/checkout@v7
 
@@ -28,17 +30,85 @@ jobs:
       - name: Audit Cardboard compatibility
         shell: bash
         run: |
-          echo "=== AxAPI imports ==="
-          grep -RIn "com.artillexstudios.axapi" src/main/java || true
-          echo "=== Config API usage ==="
-          grep -RhoE '(CONFIG|LANG)\.[A-Za-z0-9_]+' src/main/java | sort -u || true
-          echo "=== StringUtils API usage ==="
-          grep -RhoE 'StringUtils\.[A-Za-z0-9_]+' src/main/java | sort -u || true
-          echo "=== Scheduler API usage ==="
-          grep -RhoE 'Scheduler\.[A-Za-z0-9_]+|Scheduler\.get\(\)\.[A-Za-z0-9_]+' src/main/java | sort -u || true
+          set -euo pipefail
+          if grep -RInE 'com\.artillexstudios\.axapi|org\.bukkit\.craftbukkit|net\.minecraft' src/main/java; then
+            echo 'Forbidden AxAPI/NMS/CraftBukkit dependency found in main source.'
+            exit 1
+          fi
 
       - name: Build and test
         run: ./gradlew clean build --no-daemon
+
+      - name: Audit built jar
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR="$(find build/libs -maxdepth 1 -name 'CloverGraves-*.jar' ! -name '*-unshaded.jar' | head -n 1)"
+          test -n "$JAR"
+          if jar tf "$JAR" | grep -E 'com/artillexstudios/axapi|org/bukkit/craftbukkit|net/minecraft'; then
+            echo 'Forbidden AxAPI/NMS/CraftBukkit classes found in release jar.'
+            exit 1
+          fi
+
+      - name: Smoke test on slyph Cardboard 26.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke/mods smoke/plugins
+          JAR="$(find build/libs -maxdepth 1 -name 'CloverGraves-*.jar' ! -name '*-unshaded.jar' | head -n 1)"
+          cp "$JAR" smoke/plugins/CloverGraves.jar
+
+          curl -fsSL -o fabric-installer.jar 'https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.1.2/fabric-installer-1.1.2.jar'
+          curl -fsSL -o smoke/mods/fabric-api.jar 'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.156.0+26.2/fabric-api-0.156.0+26.2.jar'
+          curl -fsSL -o smoke/mods/Cardboard.jar 'https://github.com/slyphmp4/Cardboard/releases/download/v26.2.13/Cardboard-26.2.12.jar'
+
+          cd smoke
+          java -jar ../fabric-installer.jar server -mcversion 26.2 -loader 0.19.3 -downloadMinecraft
+          printf 'eula=true\n' > eula.txt
+          cat > server.properties <<'PROPERTIES'
+          online-mode=false
+          enable-rcon=false
+          enable-query=false
+          spawn-protection=0
+          view-distance=2
+          simulation-distance=2
+          max-players=1
+          motd=CloverGraves Cardboard CI
+          PROPERTIES
+
+          mkfifo server.in
+          java -Dclovergraves.compatTest=true -Xms1G -Xmx2G -jar fabric-server-launch.jar nogui <server.in >server.log 2>&1 &
+          SERVER_PID=$!
+          exec 3>server.in
+
+          PASS=0
+          for i in $(seq 1 180); do
+            if grep -q 'CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_PASS' server.log 2>/dev/null; then
+              PASS=1
+              break
+            fi
+            if grep -q 'CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_FAIL' server.log 2>/dev/null; then
+              break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          printf 'stop\n' >&3 || true
+          exec 3>&-
+          wait "$SERVER_PID" || true
+          cat server.log
+
+          if [ "$PASS" -ne 1 ]; then
+            echo 'Cardboard 26.2 self-test did not pass.'
+            exit 1
+          fi
+          if grep -E 'Error occurred while enabling CloverGraves|Could not load .*CloverGraves|NoClassDefFoundError.*(CloverGraves|artillexstudios)' server.log; then
+            echo 'CloverGraves runtime error detected.'
+            exit 1
+          fi
 
       - name: Upload CloverGraves jar
         uses: actions/upload-artifact@v4

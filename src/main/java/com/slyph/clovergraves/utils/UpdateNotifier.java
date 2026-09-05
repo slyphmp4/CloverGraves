@@ -1,9 +1,8 @@
 package com.slyph.clovergraves.utils;
 
-import com.artillexstudios.axapi.config.Config;
-import com.artillexstudios.axapi.scheduler.Scheduler;
-import com.artillexstudios.axapi.utils.StringUtils;
 import com.slyph.clovergraves.AxGraves;
+import com.slyph.clovergraves.config.CloverConfig;
+import com.slyph.clovergraves.schedulers.CloverScheduler;
 import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -15,81 +14,74 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.HashMap;
-
-import static java.time.temporal.ChronoUnit.SECONDS;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class UpdateNotifier implements Listener {
-    private static Config config;
-    private static Config lang;
+    private static final Pattern TAG_NAME = Pattern.compile("\\\"tag_name\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
+    private static CloverConfig config;
     private static boolean onJoin;
-    private static String prefix;
-    private static String updateNotifier;
 
     private final String current;
-    private String latest = null;
-    private boolean newest = true;
+    private volatile String latest;
+    private volatile boolean newest = true;
 
-    public static void init(Config config, Config lang) {
-        UpdateNotifier.config = config;
-        UpdateNotifier.lang = lang;
+    public static void init(CloverConfig configuration) {
+        config = configuration;
         reload();
     }
 
     public static void reload() {
-        onJoin = config.getBoolean("update-notifier.on-join", true);
-        prefix = config.getString("prefix");
-        updateNotifier = lang.getString("update-notifier");
+        onJoin = config != null && config.getBoolean("update-notifier.on-join", true);
     }
 
     public UpdateNotifier() {
-        this.current = AxGraves.getInstance().getDescription().getVersion();
+        current = AxGraves.getInstance().getDescription().getVersion();
+        Bukkit.getPluginManager().registerEvents(this, AxGraves.getInstance());
 
-        AxGraves.getInstance().getServer().getPluginManager().registerEvents(this, AxGraves.getInstance());
-
-        long time = 30L * 60L * 20L;
-        Scheduler.get().runAsyncTimer(t -> {
-            this.latest = readVersion();
-            this.newest = !isOutdated(current);
-
+        long period = 30L * 60L * 20L;
+        CloverScheduler.get().runAsyncTimer(task -> {
+            latest = readVersion();
+            newest = latest == null || !isOutdated(latest, current);
             if (latest == null || newest) return;
-            Scheduler.get().runLaterAsync(t2 -> {
-                Bukkit.getConsoleSender().sendMessage(getMessage());
-            }, 50L);
-            t.cancel();
-        }, 0, time);
+
+            CloverScheduler.get().run(() -> AxGraves.MESSAGEUTILS.sendLang(Bukkit.getConsoleSender(), "update-notifier", Map.of(
+                    "%current%", current,
+                    "%latest%", latest
+            )));
+            task.cancel();
+        }, 1L, period);
     }
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        if (latest == null || newest) return;
-        if (!onJoin) return;
-        if (!event.getPlayer().hasPermission(AxGraves.getInstance().getName().toLowerCase() + ".update-notify")) return;
-        Scheduler.get().runLaterAsync(t -> {
-            event.getPlayer().sendMessage(getMessage());
-        }, 50L);
-    }
-
-    private String getMessage() {
-        HashMap<String, String> map = new HashMap<>();
-        map.put("%current%", current);
-        map.put("%latest%", latest);
-        return StringUtils.formatToString(String.format("%s %s", prefix, updateNotifier), map);
+        if (latest == null || newest || !onJoin) return;
+        if (!event.getPlayer().hasPermission("axgraves.update-notify")) return;
+        AxGraves.MESSAGEUTILS.sendLang(event.getPlayer(), "update-notifier", Map.of(
+                "%current%", current,
+                "%latest%", latest
+        ));
     }
 
     @Nullable
     private String readVersion() {
-        try (HttpClient client = HttpClient.newHttpClient()) {
+        try (HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()) {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(new URI("https://www.artillex-studios.com/api/v1/resource/%s/latest-version".formatted(AxGraves.getInstance().getName())))
-                    .timeout(Duration.of(10, SECONDS))
+                    .uri(URI.create("https://api.github.com/repos/slyphmp4/CloverGraves/releases/latest"))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "CloverGraves/" + current)
                     .GET()
                     .build();
-
-            HttpResponse<?> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) return null;
-            return response.body().toString();
-        } catch (Exception ex) {
+
+            Matcher matcher = TAG_NAME.matcher(response.body());
+            if (!matcher.find()) return null;
+            String tag = matcher.group(1).trim();
+            return tag.startsWith("v") || tag.startsWith("V") ? tag.substring(1) : tag;
+        } catch (Exception ignored) {
             return null;
         }
     }
@@ -99,33 +91,21 @@ public class UpdateNotifier implements Listener {
     }
 
     public boolean isOutdated(String current) {
-        if (latest == null) return false;
-        return isOutdated(latest, current);
+        return latest != null && isOutdated(latest, current);
     }
 
-    /**
-     * Pure version comparison, split out so it's unit-testable and so a malformed response body
-     * (an HTML error page, a truncated string, a version with fewer than 3 parts, ...) can never
-     * throw out of the async update-check timer - the previous implementation did unguarded
-     * {@code Integer.parseInt} on both sides with no length check.
-     */
     static boolean isOutdated(String latest, String current) {
         if (latest == null || current == null) return false;
-
-        String[] parts1 = latest.split("\\.");
-        String[] parts2 = current.split("\\.");
-        if (parts1.length < 3 || parts2.length < 3) return false;
+        String[] newer = latest.split("\\.");
+        String[] installed = current.split("\\.");
+        if (newer.length < 3 || installed.length < 3) return false;
 
         for (int i = 0; i < 3; i++) {
-            Integer num1 = parseComponent(parts1[i]);
-            Integer num2 = parseComponent(parts2[i]);
-            if (num1 == null || num2 == null) return false;
-
-            if (num1 > num2) {
-                return true;
-            } else if (num1 < num2) {
-                return false;
-            }
+            Integer a = parseComponent(newer[i]);
+            Integer b = parseComponent(installed[i]);
+            if (a == null || b == null) return false;
+            if (a > b) return true;
+            if (a < b) return false;
         }
         return false;
     }

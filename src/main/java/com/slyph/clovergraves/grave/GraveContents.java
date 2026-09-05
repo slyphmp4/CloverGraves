@@ -1,8 +1,8 @@
 package com.slyph.clovergraves.grave;
 
-import com.artillexstudios.axapi.scheduler.Scheduler;
-import com.artillexstudios.axapi.utils.logging.LogUtils;
+import com.slyph.clovergraves.schedulers.CloverScheduler;
 import com.slyph.clovergraves.storage.ItemSerialization;
+import com.slyph.clovergraves.utils.CloverLogger;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.inventory.Inventory;
@@ -19,7 +19,6 @@ public final class GraveContents {
     private ItemStack[] items;
     private int storedXP;
     private Inventory view;
-
     private final AtomicLong version = new AtomicLong(0);
     private volatile GraveSnapshot snapshot = GraveSnapshot.INITIAL;
 
@@ -31,8 +30,8 @@ public final class GraveContents {
     }
 
     private void assertOwned() {
-        if (!Scheduler.get().isOwnedByCurrentRegion(location)) {
-            LogUtils.warn("GraveContents touched off its owning region at {} - this is a bug, please report it", location);
+        if (!CloverScheduler.get().isOwnedByCurrentRegion(location)) {
+            CloverLogger.warn("GraveContents touched off the Cardboard main thread at {}", location);
         }
     }
 
@@ -55,15 +54,13 @@ public final class GraveContents {
     public void syncFromView() {
         assertOwned();
         if (view == null) return;
-        this.items = view.getContents();
+        items = view.getContents();
         bumpVersion();
     }
 
     public void closeViewIfEmpty() {
         assertOwned();
-        if (view != null && view.getViewers().isEmpty()) {
-            view = null;
-        }
+        if (view != null && view.getViewers().isEmpty()) view = null;
     }
 
     @NotNull
@@ -73,7 +70,7 @@ public final class GraveContents {
 
     public void setItems(@NotNull ItemStack[] newItems) {
         assertOwned();
-        this.items = newItems;
+        items = newItems;
         if (view != null) view.setContents(newItems);
         bumpVersion();
     }

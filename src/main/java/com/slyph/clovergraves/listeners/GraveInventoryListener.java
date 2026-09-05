@@ -1,8 +1,8 @@
 package com.slyph.clovergraves.listeners;
 
-import com.artillexstudios.axapi.scheduler.Scheduler;
 import com.slyph.clovergraves.grave.Grave;
 import com.slyph.clovergraves.grave.GraveInventoryHolder;
+import com.slyph.clovergraves.schedulers.CloverScheduler;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryAction;
@@ -14,23 +14,14 @@ import org.bukkit.inventory.InventoryView;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-/**
- * Grave GUIs used to be created with a {@code null} holder and had no click/drag listener at
- * all, so any player could deposit items into any grave - their own or a stranger's - and use it
- * as free storage; with {@code drop-items: false}, whatever they stashed was simply deleted once
- * the grave expired. This locks the top inventory down to withdraw-only, and keeps
- * {@link com.slyph.clovergraves.grave.GraveContents} in sync with what actually happened
- * to the live Bukkit inventory after each accepted click/drag/close.
- */
 public class GraveInventoryListener implements Listener {
-
     @EventHandler(ignoreCancelled = true)
     public void onClick(@NotNull InventoryClickEvent event) {
         Grave grave = graveOf(event.getView());
         if (grave == null) return;
 
         int topSize = event.getView().getTopInventory().getSize();
-        boolean clickedTop = event.getRawSlot() < topSize;
+        boolean clickedTop = event.getRawSlot() >= 0 && event.getRawSlot() < topSize;
         InventoryAction action = event.getAction();
 
         boolean deposits = clickedTop && switch (action) {
@@ -43,7 +34,6 @@ public class GraveInventoryListener implements Listener {
             event.setCancelled(true);
             return;
         }
-
         syncSoon(grave);
     }
 
@@ -53,12 +43,10 @@ public class GraveInventoryListener implements Listener {
         if (grave == null) return;
 
         int topSize = event.getView().getTopInventory().getSize();
-        boolean touchesTop = event.getRawSlots().stream().anyMatch(slot -> slot < topSize);
-        if (touchesTop) {
+        if (event.getRawSlots().stream().anyMatch(slot -> slot >= 0 && slot < topSize)) {
             event.setCancelled(true);
             return;
         }
-
         syncSoon(grave);
     }
 
@@ -67,15 +55,14 @@ public class GraveInventoryListener implements Listener {
         Grave grave = graveOf(event.getView());
         if (grave == null) return;
 
-        Scheduler.get().runAt(grave.getLocation(), task -> {
+        CloverScheduler.get().runAt(grave.getLocation(), () -> {
             grave.contents().syncFromView();
             grave.contents().closeViewIfEmpty();
         });
     }
 
     private void syncSoon(@NotNull Grave grave) {
-        // resync one tick later, so we read the inventory state *after* the click resolves
-        Scheduler.get().runLaterAt(grave.getLocation(), task -> grave.contents().syncFromView(), 1L);
+        CloverScheduler.get().runLaterAt(grave.getLocation(), task -> grave.contents().syncFromView(), 1L);
     }
 
     @Nullable

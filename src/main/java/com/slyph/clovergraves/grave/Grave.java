@@ -1,18 +1,18 @@
 package com.slyph.clovergraves.grave;
 
-import com.artillexstudios.axapi.scheduler.ScheduledTask;
-import com.artillexstudios.axapi.scheduler.Scheduler;
-import com.artillexstudios.axapi.utils.StringUtils;
 import com.slyph.clovergraves.api.events.GraveInteractEvent;
 import com.slyph.clovergraves.api.events.GraveOpenEvent;
 import com.slyph.clovergraves.config.GraveSettings;
 import com.slyph.clovergraves.config.HologramSettings;
+import com.slyph.clovergraves.schedulers.CloverScheduler;
+import com.slyph.clovergraves.schedulers.CloverTask;
 import com.slyph.clovergraves.storage.EndReason;
 import com.slyph.clovergraves.utils.BlacklistUtils;
 import com.slyph.clovergraves.utils.ExperienceUtils;
 import com.slyph.clovergraves.utils.InventoryOrderSnapshot;
 import com.slyph.clovergraves.utils.InventoryUtils;
 import com.slyph.clovergraves.utils.LocationUtils;
+import com.slyph.clovergraves.utils.TextFormatter;
 import com.slyph.clovergraves.utils.Utils;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
@@ -61,7 +61,7 @@ public class Grave {
     private final GraveContents contents;
     private final GraveInventoryHolder holder;
     private final ArmorStand entity;
-    private final ScheduledTask tickTask;
+    private final CloverTask tickTask;
     private final AtomicBoolean removed = new AtomicBoolean(false);
     private final Map<UUID, Long> lastProtectionNotice = new ConcurrentHashMap<>();
 
@@ -84,21 +84,19 @@ public class Grave {
             filtered = new ArrayList<>(filtered.subList(0, InventoryUtils.MAX_SLOTS));
         }
 
-        this.location = LocationUtils.getCenterOf(loc, true, false);
+        location = LocationUtils.getCenterOf(loc, true, false);
         LocationUtils.clampLocation(location);
-        this.blockKey = BlockKey.of(location);
+        blockKey = BlockKey.of(location);
+        player = offlinePlayer;
+        playerName = offlinePlayer.getName() == null ? LANG.getString("unknown-player", "???") : offlinePlayer.getName();
+        spawned = date;
+        rows = InventoryUtils.getRequiredRows(filtered.size());
+        String title = TextFormatter.formatToString(LANG.getString("gui-name", "&0%player%'s Grave").replace("%player%", playerName));
+        contents = new GraveContents(location, title, filtered, storedXP);
+        holder = new GraveInventoryHolder(this);
 
-        this.player = offlinePlayer;
-        this.playerName = offlinePlayer.getName() == null ? LANG.getString("unknown-player", "???") : offlinePlayer.getName();
-        this.spawned = date;
-
-        this.rows = InventoryUtils.getRequiredRows(filtered.size());
-        String title = StringUtils.formatToString(LANG.getString("gui-name").replace("%player%", playerName));
-        this.contents = new GraveContents(location, title, filtered, storedXP);
-        this.holder = new GraveInventoryHolder(this);
-
-        for (ItemStack it : overflow) {
-            location.getWorld().dropItem(location.clone(), it);
+        for (ItemStack item : overflow) {
+            location.getWorld().dropItem(location.clone(), item);
         }
 
         Player onlinePlayer = offlinePlayer.getPlayer();
@@ -107,11 +105,12 @@ public class Grave {
                     "%world%", LocationUtils.getWorldName(location.getWorld()),
                     "%x%", String.valueOf(location.getBlockX()),
                     "%y%", String.valueOf(location.getBlockY()),
-                    "%z%", String.valueOf(location.getBlockZ())));
+                    "%z%", String.valueOf(location.getBlockZ())
+            ));
         }
 
         Location headLocation = location.clone().add(0, 1 + CONFIG.getFloat("head-height", -1.2f), 0);
-        this.entity = (ArmorStand) location.getWorld().spawnEntity(headLocation, EntityType.ARMOR_STAND);
+        entity = (ArmorStand) location.getWorld().spawnEntity(headLocation, EntityType.ARMOR_STAND);
         entity.setVisible(false);
         entity.setSmall(true);
         entity.setBasePlate(false);
@@ -121,7 +120,7 @@ public class Grave {
         entity.setPersistent(false);
         entity.setCollidable(false);
         entity.setCanPickupItems(false);
-        entity.getEquipment().setHelmet(Utils.getPlayerHead(offlinePlayer));
+        if (entity.getEquipment() != null) entity.getEquipment().setHelmet(Utils.getPlayerHead(offlinePlayer));
 
         float yaw = CONFIG.getBoolean("rotate-head-360", true)
                 ? location.getYaw()
@@ -129,19 +128,19 @@ public class Grave {
         entity.setRotation(yaw, 0f);
 
         updateHologram();
-        this.tickTask = Scheduler.get().runTimerAt(location, this::tick, TICK_PERIOD, TICK_PERIOD);
+        tickTask = CloverScheduler.get().runTimerAt(location, this::tick, TICK_PERIOD, TICK_PERIOD);
     }
 
     public void tick() {
+        if (removed.get()) return;
         contents.closeViewIfEmpty();
         contents.refreshSnapshot();
 
         GraveSettings settings = GraveSettings.current();
-        GraveSnapshot snap = contents.snapshot();
-
+        GraveSnapshot snapshot = contents.snapshot();
         boolean outOfTime = settings.despawnTimeSeconds() != -1
                 && settings.despawnTimeSeconds() * 1_000L <= System.currentTimeMillis() - spawned;
-        boolean emptyDespawn = settings.despawnWhenEmpty() && snap.empty();
+        boolean emptyDespawn = settings.despawnWhenEmpty() && snapshot.empty();
 
         if (outOfTime || emptyDespawn) {
             remove(outOfTime ? EndReason.EXPIRED : EndReason.LOOTED);
@@ -170,7 +169,6 @@ public class Grave {
 
     public void interact(@NotNull Player opener, EquipmentSlot slot) {
         GraveSettings settings = GraveSettings.current();
-
         if (!opener.getWorld().equals(location.getWorld())) return;
         if (opener.getLocation().distanceSquared(location) > settings.interactRadiusSquared()) return;
 
@@ -187,22 +185,21 @@ public class Grave {
             return;
         }
 
-        GraveInteractEvent graveInteractEvent = new GraveInteractEvent(opener, this);
-        Bukkit.getPluginManager().callEvent(graveInteractEvent);
-        if (graveInteractEvent.isCancelled()) return;
+        GraveInteractEvent interactEvent = new GraveInteractEvent(opener, this);
+        Bukkit.getPluginManager().callEvent(interactEvent);
+        if (interactEvent.isCancelled()) return;
 
         if (slot == EquipmentSlot.HAND && opener.isSneaking()) {
             if (opener.getGameMode() == GameMode.SPECTATOR) return;
             if (!settings.enableInstantPickup()) return;
             if (settings.instantPickupOnlyOwn() && !isOwner) return;
-
             instantPickup(opener, settings);
             return;
         }
 
-        GraveOpenEvent graveOpenEvent = new GraveOpenEvent(opener, this);
-        Bukkit.getPluginManager().callEvent(graveOpenEvent);
-        if (graveOpenEvent.isCancelled()) return;
+        GraveOpenEvent openEvent = new GraveOpenEvent(opener, this);
+        Bukkit.getPluginManager().callEvent(openEvent);
+        if (openEvent.isCancelled()) return;
 
         transferXP(opener);
         opener.openInventory(contents.openFor(holder, rows));
@@ -216,13 +213,12 @@ public class Grave {
     private void notifyProtected(@NotNull Player opener, @NotNull GraveSettings settings) {
         long now = System.currentTimeMillis();
         long cooldownMillis = settings.protectionMessageCooldownSeconds() * 1_000L;
-
         Long last = lastProtectionNotice.get(opener.getUniqueId());
         if (last != null && now - last < cooldownMillis) return;
         lastProtectionNotice.put(opener.getUniqueId(), now);
 
-        long remainingMillis = Math.max(0, settings.protectionSeconds() * 1_000L - (now - spawned));
-        MESSAGEUTILS.sendLang(opener, "interact.protected", Map.of("%time%", StringUtils.formatTime(remainingMillis)));
+        long remaining = Math.max(0, settings.protectionSeconds() * 1_000L - (now - spawned));
+        MESSAGEUTILS.sendLang(opener, "interact.protected", Map.of("%time%", TextFormatter.formatTime(remaining)));
     }
 
     private void transferXP(@NotNull Player opener) {
@@ -234,7 +230,7 @@ public class Grave {
         transferXP(opener);
 
         PlayerInventory inventory = opener.getInventory();
-        ItemStack[] snapshot = contents.items();
+        ItemStack[] snapshot = contents.items().clone();
         boolean changed = false;
 
         for (int i = 0; i < snapshot.length; i++) {
@@ -288,8 +284,8 @@ public class Grave {
         if (hologram != null) hologram.remove();
 
         List<String> lines = LANG.getStringList("hologram");
-        double hologramHeight = CONFIG.getFloat("hologram-height", 0.75f) + 1;
-        Location hologramLocation = location.clone().add(0, getNewHeight(hologramHeight, lines.size(), HOLOGRAM_LINE_SPACING), 0);
+        double height = CONFIG.getFloat("hologram-height", 0.75f) + 1;
+        Location hologramLocation = location.clone().add(0, getNewHeight(height, lines.size(), HOLOGRAM_LINE_SPACING), 0);
 
         hologram = (TextDisplay) location.getWorld().spawnEntity(hologramLocation, EntityType.TEXT_DISPLAY);
         HologramSettings settings = HologramSettings.parse(CONFIG.getSection("holograms"));
@@ -307,16 +303,13 @@ public class Grave {
 
     private void updateHologramText(boolean force) {
         if (hologram == null || !hologram.isValid()) return;
-
         long now = System.currentTimeMillis();
         if (!force && now - lastHologramUpdateAt < 1_000L) return;
         lastHologramUpdateAt = now;
 
         GraveSnapshot snapshot = contents.snapshot();
         int despawnTime = CONFIG.getInt("despawn-time-seconds", 1800);
-        long remaining = despawnTime == -1
-                ? now - spawned
-                : Math.max(0L, despawnTime * 1_000L - (now - spawned));
+        long remaining = despawnTime == -1 ? now - spawned : Math.max(0L, despawnTime * 1_000L - (now - spawned));
 
         List<String> formatted = new ArrayList<>();
         for (String line : LANG.getStringList("hologram")) {
@@ -324,8 +317,8 @@ public class Grave {
                     .replace("%player%", playerName)
                     .replace("%item%", String.valueOf(snapshot.itemCount()))
                     .replace("%xp%", String.valueOf(snapshot.storedXP()))
-                    .replace("%despawn-time%", StringUtils.formatTime(remaining));
-            formatted.add(StringUtils.formatToString(replaced));
+                    .replace("%despawn-time%", TextFormatter.formatTime(remaining));
+            formatted.add(TextFormatter.formatToString(replaced));
         }
 
         String text = String.join("\n", formatted);
@@ -350,21 +343,20 @@ public class Grave {
     public void remove(@NotNull EndReason reason) {
         if (!removed.compareAndSet(false, true)) return;
 
-        Runnable runnable = () -> {
-            if (tickTask != null) tickTask.cancel();
+        Runnable action = () -> {
+            tickTask.cancel();
             SpawnedGraves.removeGrave(this, reason);
             removeInventory();
             if (entity != null) entity.remove();
             if (hologram != null) hologram.remove();
         };
 
-        if (Scheduler.get().isOwnedByCurrentRegion(location)) runnable.run();
-        else Scheduler.get().runAt(location, runnable);
+        if (CloverScheduler.get().isOwnedByCurrentRegion(location)) action.run();
+        else CloverScheduler.get().runAt(location, action);
     }
 
     public void removeInventory() {
         closeAllViewers();
-
         ItemStack[] drained = contents.drainItems();
         int xp = contents.takeXP();
         contents.refreshSnapshot();
@@ -387,13 +379,11 @@ public class Grave {
     private void closeAllViewers() {
         Inventory view = contents.viewIfOpen();
         if (view == null) return;
-        for (HumanEntity viewer : new ArrayList<>(view.getViewers())) {
-            closeFor(viewer);
-        }
+        for (HumanEntity viewer : new ArrayList<>(view.getViewers())) closeFor(viewer);
     }
 
     private void closeFor(@NotNull HumanEntity viewer) {
-        Scheduler.get().run(viewer, task -> viewer.closeInventory(), () -> {
+        CloverScheduler.get().run(viewer, task -> viewer.closeInventory(), () -> {
         });
     }
 
@@ -421,7 +411,7 @@ public class Grave {
     }
 
     public void assignStorageId(long id) {
-        this.storageId = id;
+        storageId = id;
     }
 
     public long lastPersistedVersion() {
@@ -429,7 +419,7 @@ public class Grave {
     }
 
     public void markPersisted(long version) {
-        this.lastPersistedVersion = version;
+        lastPersistedVersion = version;
     }
 
     public Location getLocation() {

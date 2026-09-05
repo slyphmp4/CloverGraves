@@ -1,20 +1,12 @@
 package com.slyph.clovergraves.config;
 
-import com.artillexstudios.axapi.config.Config;
 import org.jetbrains.annotations.NotNull;
 
-/**
- * Cached snapshot of the config keys read from {@code Grave#tick()} and {@code Grave#interact},
- * which previously re-read the YAML-backed config map several times per grave, every 100ms.
- * Rebuilt on load/reload via {@link #reload(Config)} and published through a plain volatile
- * static reference, so any thread sees a consistent, fully-built snapshot without needing a lock.
- */
 public record GraveSettings(int despawnTimeSeconds, boolean despawnWhenEmpty, boolean autoRotationEnabled,
                              float autoRotationSpeed, boolean dropItems, boolean droppedItemVelocity,
                              double interactRadius, boolean interactOnlyOwn, boolean enableInstantPickup,
                              boolean instantPickupOnlyOwn, boolean autoEquipArmor, int protectionSeconds,
                              int protectionMessageCooldownSeconds) {
-
     private static volatile GraveSettings current = defaults();
 
     public double interactRadiusSquared() {
@@ -26,7 +18,7 @@ public record GraveSettings(int despawnTimeSeconds, boolean despawnWhenEmpty, bo
         return current;
     }
 
-    public static void reload(@NotNull Config config) {
+    public static void reload(@NotNull CloverConfig config) {
         current = new GraveSettings(
                 config.getInt("despawn-time-seconds", 1800),
                 config.getBoolean("despawn-when-empty", true),
@@ -46,6 +38,6 @@ public record GraveSettings(int despawnTimeSeconds, boolean despawnWhenEmpty, bo
 
     @NotNull
     private static GraveSettings defaults() {
-        return new GraveSettings(180, true, false, 10f, true, true, 7.0, false, true, false, true, 30, 3);
+        return new GraveSettings(1800, true, false, 10f, true, true, 7.0, false, true, false, true, 30, 3);
     }
 }

@@ -4,34 +4,35 @@ plugins {
 }
 
 group = "com.slyph"
-version = "1.29.0"
+version = "2.0.0"
 
 repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
-    maven("https://repo.artillex-studios.com/releases/")
+    maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
     maven("https://jitpack.io")
     mavenCentral()
 }
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.110-stable")
-    implementation("com.artillexstudios.axapi:axapi:2.1.8:all")
-    compileOnly("org.slf4j:slf4j-api:2.0.17")
     compileOnly("com.github.MilkBowl:VaultAPI:1.7") {
         isTransitive = false
     }
-    implementation("org.bstats:bstats-bukkit:3.2.1")
+    compileOnly("me.clip:placeholderapi:2.12.3")
 
-    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    implementation("org.bstats:bstats-bukkit:3.2.1")
+    implementation("com.h2database:h2:2.4.240")
+    implementation("org.xerial:sqlite-jdbc:3.53.4.0")
+    implementation("com.mysql:mysql-connector-j:26.7.0")
+
+    testImplementation(platform("org.junit:junit-bom:5.14.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("io.papermc.paper:paper-api:26.2.build.110-stable")
-    testImplementation("org.slf4j:slf4j-api:2.0.17")
+    testImplementation("com.h2database:h2:2.4.240")
     testImplementation("com.github.MilkBowl:VaultAPI:1.7") {
         isTransitive = false
     }
-    testImplementation("com.h2database:h2:2.3.232")
-    testImplementation("it.unimi.dsi:fastutil:8.5.13")
 }
 
 java {
@@ -62,9 +63,9 @@ tasks.jar {
 tasks.shadowJar {
     archiveBaseName.set("CloverGraves")
     archiveClassifier.set("")
-    relocate("com.artillexstudios.axapi", "com.slyph.clovergraves.libs.axapi")
+    mergeServiceFiles()
     relocate("org.bstats", "com.slyph.clovergraves.libs.bstats")
-    relocate("revxrsal.commands", "com.slyph.clovergraves.libs.lamp")
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
 }
 
 tasks.build {

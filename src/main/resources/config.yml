@@ -1,137 +1,58 @@
-prefix: "<gradient:#FF00FF:#DD00FF><b>AxGraves</b></gradient> &7» "
+prefix: "<gradient:#FF00FF:#DD00FF><b>CloverGraves</b></gradient> &7» "
 
-# how fast should the graves disappear
-# set to -1 to make graves never despawn
-# in seconds
 despawn-time-seconds: 1800
-
-# should graves drop all items on the ground when they expire?
-# if false: items will be removed
 drop-items: true
-
-# if drop-items is true, should the dropped items have a velocity? (so should they fly around when dropped or stay in one block?)
 dropped-item-velocity: true
-
-# should players have the ability to take all items from a death chest by shift right clicking?
 enable-instant-pickup: true
-
-# only works if enable-instant-pickup is true
-# this makes it that only the owner of the grave will be able to instantly pick it up
 instant-pickup-only-own: false
-
-# if you enable this, items will be taken away and stored in the grave on death, even if third party plugin tries to keep them
-# enabling this will also make the keep-inventory gamerule ineffective
 override-keep-inventory: false
-
-# if you enable this, xp levels will be taken away and stored in the grave on death, even if third party plugin tries to keep them
 override-keep-level: false
-
-# how high should grave holograms spawn?
-# only applies to new graves
 hologram-height: 0.5
-
-# how high should the player head be?
-# in some versions on some clients may see the heads glitched in the ground
-# use this option OR viaversion's hologram-y setting to correct it
-# only applies to new graves
 head-height: -1.2
-
-# true: the head can face in all the 360 degrees
-# false: the head can face in only 4 directions (north, east, south, west)
 rotate-head-360: true
 
-# should the head rotate
 auto-rotation:
   enabled: false
   speed: 10.0
 
-# true: only the person who died and people with axgraves.admin can open the grave
-# false: everyone can open the grave
 interact-only-own: false
-
-# how close (in blocks) a player must be to interact with a grave, or to keep its GUI open
 interact-radius: 7.0
 
-# temporary owner-only protection after death, separate from interact-only-own above.
-# blocks both looting and xp pickup by anyone but the owner (and axgraves.admin /
-# axgraves.protection.bypass) until it expires. 0 disables it, -1 makes it permanent.
 protection:
   seconds: 30
-  # minimum time between repeated "this grave is protected" messages to the same player
   message-cooldown-seconds: 3
 
-# relocates a grave if the death spot would be unusable. never force-loads chunks, so it
-# only searches through blocks that are already loaded.
 safe-placement:
   enabled: true
   avoid-lava: true
   avoid-solid: true
   avoid-nether-roof: true
-  # y coordinate at/above which a nether location counts as "the roof"
   nether-roof-y: 125
-  # require actual solid ground directly beneath the grave, not just "not lava/not solid
-  # itself". without this, an empty column of void air always counts as "safe" (it's neither
-  # solid nor lava), so a death far below the world would never be relocated at all - it would
-  # just float in open space. keep this true unless you have a reason not to.
   require-ground-support: true
-  # how far sideways to search for solid ground. hard-capped to 32 regardless of this value.
-  # a larger radius costs more block checks per death, but only when nothing closer is found.
   max-horizontal-radius: 16
-  # how far up/down to search for solid ground. this is the one that matters most for the
-  # void: a player falling to the bottom of the world can easily be 100+ blocks below the
-  # nearest real terrain, so a small value here just means the local search always fails and
-  # falls through to the world-spawn fallback instead of relocating nearby.
   max-vertical-distance: 128
-  # tell the owner where their grave ended up if it was moved
   notify-owner: true
 
-# should the player lose any xp on death?
-# this is a percentage, so 0.5 would be 50% xp
 xp-keep-percentage: 1.0
-
-# should the plugin store items in graves?
-# if disabled, the items will be dropped on the ground
 store-items: true
-
-# should the plugin store XP in graves?
-# if disabled, XP will be dropped on the ground
 store-xp: true
 
-# what order should items be put in the grave?
-# all the other items will be put AFTER these
-# values: ARMOR, HAND, OFFHAND
 grave-item-order:
   - "ARMOR"
   - "HAND"
   - "OFFHAND"
 
-# should the armor parts be auto equipped?
 auto-equip-armor: true
-
-# how many graves can a single player have at the same time?
-# if the limit is reached, the first grave will be removed
-# set to -1 to disable
-# you can override this by giving players the axgraves.limit.<amount> permissions
 grave-limit: -1
-
-# should the grave disappear when all items get taken out of it?
 despawn-when-empty: true
 
 save-graves:
-  # should graves be saved if the server stops?
   enabled: true
-  # deprecated: use storage.flush-interval-seconds instead. still read as a fallback if
-  # storage.flush-interval-seconds is absent.
   auto-save-seconds: 30
 
 storage:
-  # H2 (default, embedded, no setup needed), SQLITE (embedded) or MYSQL.
-  # the driver for your chosen type is downloaded automatically on first start.
-  # if that fails (e.g. an air-gapped server), the plugin falls back to a JSON file
-  # automatically - note the JSON fallback does not support grave history/restore.
   type: H2
   table-prefix: "axgraves_"
-  # only used when type is MYSQL
   mysql:
     address: 127.0.0.1
     port: 3306
@@ -141,48 +62,26 @@ storage:
     pool:
       maximum-pool-size: 10
       minimum-idle: 10
-  # how often live graves are persisted, in seconds. -1 = only on shutdown (may not save on a crash)
   flush-interval-seconds: 15
 
 history:
-  # keep a record of past graves so admins can inspect and restore them (/axgraves history, /axgraves restore)
-  # only takes effect when storage.type is a SQL backend - see storage.type above
   enabled: true
   keep-per-player: 5
   keep-days: 14
 
-# /axgraves tp (and /bibingka grave tp) - teleporting to your own grave
 teleport:
-  # minimum time between uses, per player. only starts counting after a teleport actually
-  # completes - a teleport cancelled by moving does not use up the cooldown.
   cooldown-seconds: 60
-  # the teleport is not instant: a countdown runs for this many seconds first
   warmup-seconds: 5
-  # cancel the pending teleport if the player moves during the countdown
   cancel-on-move: true
-  # cancel the pending teleport if the player takes damage during the countdown
   cancel-on-damage: true
-  # charge the player for teleporting to their grave. 0 disables this entirely (also skips the
-  # confirmation step below). requires a Vault-compatible economy plugin - if none is installed,
-  # this is treated as free rather than blocking the command (see EconomyHook).
   cost: 0
-  # shown before the amount, e.g. "100" -> "₱100". purely cosmetic - Vault's own currency
-  # formatting/name is not used, so this always matches regardless of economy plugin.
   currency-symbol: "₱"
-  # when cost is above 0, the first /tp only checks the player can afford it and asks them to run
-  # the command again within this many seconds to confirm - it does not charge or start the
-  # countdown yet. the actual charge happens right before the teleport, so a countdown cancelled
-  # by moving/damage never costs anything.
   confirmation-timeout-seconds: 15
 
-# by default every grave will use the player's skull
-# with this setting you can override it
 custom-grave-skull:
   enabled: false
   base64: ""
 
-# you can add any amount of worlds
-# if you don't define a world, the plugin will use the default world limits of the dimension
 spawn-height-limits:
   world:
     min: -64
@@ -194,70 +93,34 @@ spawn-height-limits:
     min: 0
     max: 319
 
-# you must define at least 1
-# requires a restart to update
-command-aliases:
-  - "axgraves"
-  - "axgrave"
-  - "graves"
-  - "grave"
-  - "bibingka"
-
-# used for the %world% placeholder
-# if a world isn't defined here, it will default to the original name of the world
-# note: world names are case-sensitive
 world-name:
   world: "Overworld"
   world_nether: "The Nether"
   world_the_end: "The End"
 
-# worlds where graves won't spawn
-# this is case-sensitive
 disabled-worlds:
   - "blacklisted_world"
 
-# if players die from any of the following, no graves will be spawned
-# list of valid values: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/event/entity/EntityDamageEvent.DamageCause.html
-# case sensitive
 blacklisted-death-causes:
   - "EXAMPLE_DEATH_CAUSE"
 
-# items that will be removed on death and will not show up in graves
 blacklisted-items:
   "1":
     material: "barrier"
     name-contains: "Banned item's name"
 
-# what event priority should the plugin use? if everything is working, no need to touch this
-# however if the plugin is spawning graves without items, you can try setting this to lower values (lower = runs earlier)
-# values: LOWEST, LOW, NORMAL, HIGH, HIGHEST, MONITOR
-# requires a restart to change
 death-listener-priority: HIGHEST
 
-# settings for holograms displays
 holograms:
-  # set to "00000000" to make it invisible
-  # format (hexadecimal, quoted): AARRGGBB
   background-color: "00000000"
-  # list: left, right, center
   alignment: center
-  # list: fixed, vertical, horizontal, center
   billboard: vertical
-  # should blocks/entities be visible behind the displays?
   see-through: false
-  # should text have an outline?
   shadow: true
 
-# should be plugin notify you if there is a new update?
 update-notifier:
-  # if enabled, it will display the message in the console
   enabled: true
-  # if enabled, it will broadcast the update message to all players who have the <plugin-name>.update-notify permission
   on-join: true
 
-# prints out a lot of information about the plugin in the console
-# this can cause a lot of spam, only use if a developer asks you to
 debug: false
-
-# do not edit
-version: 22
+version: 23

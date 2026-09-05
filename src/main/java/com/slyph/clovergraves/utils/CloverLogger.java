@@ -1,61 +1,59 @@
 package com.slyph.clovergraves.utils;
 
+import org.jetbrains.annotations.NotNull;
+
+import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class CloverLogger {
-    private static final Logger LOGGER = Logger.getLogger("CloverGraves");
+    private static volatile Logger logger = Logger.getLogger("CloverGraves");
 
     private CloverLogger() {
     }
 
+    public static void bind(@NotNull Logger pluginLogger) {
+        logger = pluginLogger;
+    }
+
     public static void info(String message, Object... args) {
-        LOGGER.info(format(message, args));
+        logger.info(format(message, args));
     }
 
     public static void warn(String message, Object... args) {
-        LOGGER.warning(format(message, args));
+        logger.warning(format(message, args));
+    }
+
+    public static void debug(String message, Object... args) {
+        logger.fine(format(message, args));
     }
 
     public static void error(String message, Object... args) {
-        Throwable throwable = extractThrowable(args);
-        String formatted = format(message, throwable == null ? args : withoutLast(args));
-        if (throwable == null) {
-            LOGGER.severe(formatted);
-        } else {
-            LOGGER.log(Level.SEVERE, formatted, throwable);
+        Throwable throwable = null;
+        Object[] values = args;
+        if (args != null && args.length > 0 && args[args.length - 1] instanceof Throwable cause) {
+            throwable = cause;
+            values = Arrays.copyOf(args, args.length - 1);
         }
+
+        String formatted = format(message, values);
+        if (throwable == null) logger.severe(formatted);
+        else logger.log(Level.SEVERE, formatted, throwable);
     }
 
     private static String format(String message, Object... args) {
         if (message == null || args == null || args.length == 0) return message;
 
-        StringBuilder builder = new StringBuilder();
+        StringBuilder builder = new StringBuilder(message.length() + args.length * 8);
+        int start = 0;
         int argument = 0;
-        int position = 0;
-        while (position < message.length()) {
-            int placeholder = message.indexOf("{}", position);
-            if (placeholder == -1 || argument >= args.length) {
-                builder.append(message, position, message.length());
-                break;
-            }
-            builder.append(message, position, placeholder);
-            builder.append(String.valueOf(args[argument++]));
-            position = placeholder + 2;
+        while (argument < args.length) {
+            int index = message.indexOf("{}", start);
+            if (index < 0) break;
+            builder.append(message, start, index).append(String.valueOf(args[argument++]));
+            start = index + 2;
         }
-        if (position >= message.length()) return builder.toString();
+        builder.append(message, start, message.length());
         return builder.toString();
-    }
-
-    private static Throwable extractThrowable(Object[] args) {
-        if (args == null || args.length == 0) return null;
-        Object last = args[args.length - 1];
-        return last instanceof Throwable throwable ? throwable : null;
-    }
-
-    private static Object[] withoutLast(Object[] args) {
-        Object[] copy = new Object[Math.max(0, args.length - 1)];
-        if (copy.length > 0) System.arraycopy(args, 0, copy, 0, copy.length);
-        return copy;
     }
 }

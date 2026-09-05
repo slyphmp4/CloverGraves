@@ -1,79 +1,175 @@
 hologram:
-  - "&#FF0000☠ &#FF0000&l%player% &#FF0000☠"
-  - "&#00CC00⌛ &#00FF00%despawn-time% &#00CC00⌛"
-  - "&#00AAFF%item% &fɪᴛᴇᴍ &8| &#00AAFF%xp% &fxᴘ"
+  - "&FF0000☠ &FF0000&l%player% &FF0000☠"
+  - "&00CC00⌛ &00FF00%despawn-time% &00CC00⌛"
+  - "&00AAFF%item% &fɪᴛᴇᴍ &8| &00AAFF%xp% &fxᴘ"
 
 help:
-  - " "
-  - "<gradient:#FF00FF:#DD00FF><b>AxGraves</b></gradient> <#FF55FF>Help"
-  - " <#FF55FF>➤ <white>/axgraves reload <#DDDDDD>| <#FFAAFF>Reload plugin"
-  - " <#FF55FF>➤ <white>/axgraves list <#DDDDDD>| <#FFAAFF>List spawned graves"
-  - " <#FF55FF>➤ <white>/axgraves tp <#DDDDDD>| <#FFAAFF>Teleport to last grave"
-  - " <#FF55FF>➤ <white>/axgraves history <player> <#DDDDDD>| <#FFAAFF>View a player's grave history"
-  - " <#FF55FF>➤ <white>/axgraves restore <player> <id> <#DDDDDD>| <#FFAAFF>Restore a past grave"
-  - " <#FF55FF>➤ <white>/bibingka grave tp <#DDDDDD>| <#FFAAFF>Teleport to your grave (5s warmup, 60s cooldown)"
-  - " "
+  - "&7"
+  - "<gradient:#FF00FF:#DD00FF><b>CloverGraves</b></gradient> <#FF55FF>Help"
+  - " <#FF55FF>➤ <white>/clovergraves reload <#DDDDDD>| <#FFAAFF>Reload plugin"
+  - " <#FF55FF>➤ <white>/clovergraves list <#DDDDDD>| <#FFAAFF>List spawned graves"
+  - " <#FF55FF>➤ <white>/clovergraves tp <#DDDDDD>| <#FFAAFF>Teleport to last grave"
+  - " <#FF55FF>➤ <white>/clovergraves history <player> <#DDDDDD>| <#FFAAFF>View a player's grave history"
+  - " <#FF55FF>➤ <white>/clovergraves restore <player> <id> <#DDDDDD>| <#FFAAFF>Restore a past grave"
+  - "&7"
 
 gui-name: "&0%player%'s Grave"
-
-# if you restart the server, sometimes the server can't find the owner's name, this will be used for it
 unknown-player: "Unknown"
 
 reload:
-  success: "&#33FF33Plugin successfully reloaded!"
-  failed: "&#FF3333Failed to reload the plugin! Something is wrong in the &f%file%&#FF3333 file, look in the console or use a yaml validator to fix the errors!"
+  success:
+    - "&7"
+    - "&33FF33Plugin successfully reloaded!"
+    - "&7"
+  failed:
+    - "&7"
+    - "&FF3333Failed to reload the plugin! Check the &f%file%&FF3333 file."
+    - "&7"
 
 interact:
-  not-your-grave: "&#FFAAFFYou can only open your own grave!"
-  protected: "&#FFAAFFThis grave is still protected for &f%time%&#FFAAFF!"
+  not-your-grave:
+    - "&7"
+    - "&FFAAFFYou can only open your own grave!"
+    - "&7"
+  protected:
+    - "&7"
+    - "&FFAAFFThis grave is still protected for &f%time%&FFAAFF!"
+    - "&7"
 
 death-message:
   enabled: false
-  message: "&#FFAAAAYou have died at &f%world% %x%, %y%, %z%&#FFAAAA!"
+  message:
+    - "&7"
+    - "&FFAAAAYou have died at &f%world% %x%, %y%, %z%&FFAAAA!"
+    - "&7"
 
-grave-relocated: "&#FFAAAAYour grave could not fit where you died and was moved to &f%world% %x%, %y%, %z%&#FFAAAA!"
-grave-relocated-far: "&#FFAAAANo safe ground was found near where you died, so your grave was moved near spawn: &f%world% %x%, %y%, %z%&#FFAAAA!"
+grave-relocated:
+  - "&7"
+  - "&FFAAAAYour grave was moved to &f%world% %x%, %y%, %z%&FFAAAA."
+  - "&7"
+
+grave-relocated-far:
+  - "&7"
+  - "&FFAAAANo safe ground was found nearby. Your grave was moved near spawn: &f%world% %x%, %y%, %z%&FFAAAA."
+  - "&7"
 
 teleport:
-  cooldown: "&#FFAAFFYou must wait &f%time%&#FFAAFF before teleporting to your grave again!"
-  already-pending: "&#FFAAFFYou already have a teleport in progress!"
-  warmup-start: "&#FFAAFFTeleporting to your grave in &f%seconds%s&#FFAAFF... don't move!"
-  countdown: "&#FFAAFF%seconds%..."
-  warmup-complete: "&#33FF33Teleporting now!"
-  cancelled: "&#FF3333Teleport cancelled!"
-  cost-confirm: "&#FFAAFFTeleporting to your grave costs &f%cost%&#FFAAFF. Run the command again within &f%seconds%s&#FFAAFF to confirm."
-  cost-insufficient: "&#FF3333You need &f%cost%&#FF3333 to teleport to your grave, but you only have &f%balance%&#FF3333."
-  cost-charged: "&#FFAAFFCharged &f%cost%&#FFAAFF for the teleport."
+  cooldown:
+    - "&7"
+    - "&FFAAFFYou must wait &f%time%&FFAAFF before teleporting again."
+    - "&7"
+  already-pending:
+    - "&7"
+    - "&FFAAFFYou already have a teleport in progress."
+    - "&7"
+  warmup-start:
+    - "&7"
+    - "&FFAAFFTeleporting in &f%seconds%s&FFAAFF. Don't move."
+    - "&7"
+  countdown:
+    - "&FFAAFF%seconds%..."
+  warmup-complete:
+    - "&33FF33Teleporting now!"
+  cancelled:
+    - "&7"
+    - "&FF3333Teleport cancelled."
+    - "&7"
+  cost-confirm:
+    - "&7"
+    - "&FFAAFFTeleport costs &f%cost%&FFAAFF. Run the command again within &f%seconds%s&FFAAFF to confirm."
+    - "&7"
+  cost-insufficient:
+    - "&7"
+    - "&FF3333You need &f%cost%&FF3333, but you only have &f%balance%&FF3333."
+    - "&7"
+  cost-charged:
+    - "&7"
+    - "&FFAAFFCharged &f%cost%&FFAAFF for the teleport."
+    - "&7"
 
 history:
-  header: "&#FF00FF&l=== GRAVE HISTORY: %player% ==="
-  entry: "&#FF00FF[#%id%] &#FFAAFF%world% %x%, %y%, %z% &7- %items% items, %xp% xp &7(%reason%, %time% ago)"
-  entry-restored: "&#FF00FF[#%id%] &#FFAAFF%world% %x%, %y%, %z% &7- %items% items, %xp% xp &7(%reason%, %time% ago, already restored)"
-  empty: "&#FFAAFFNo grave history found for &f%player%&#FFAAFF."
+  header:
+    - "&7"
+    - "&FF00FF&l=== GRAVE HISTORY: %player% ==="
+  entry:
+    - "&FF00FF[#%id%] &FFAAFF%world% %x%, %y%, %z% &7- %items% items, %xp% xp &7(%reason%, %time% ago)"
+  entry-restored:
+    - "&FF00FF[#%id%] &FFAAFF%world% %x%, %y%, %z% &7- %items% items, %xp% xp &7(%reason%, %time% ago, already restored)"
+  empty:
+    - "&7"
+    - "&FFAAFFNo grave history found for &f%player%&FFAAFF."
+    - "&7"
 
 restore:
-  success: "&#33FF33Restored grave &f#%id%&#33FF33 belonging to &f%player%&#33FF33 at &f%world% %x%, %y%, %z%&#33FF33."
-  not-found: "&#FF3333No grave &f#%id%&#FF3333 found for &f%player%&#FF3333."
-  already-restored: "&#FF3333Grave &f#%id%&#FF3333 has already been restored."
-  failed: "&#FF3333Failed to restore grave &f#%id%&#FF3333 - see console for details."
-  unsupported: "&#FF3333Grave history/restore requires a SQL storage backend (see storage.type in config.yml)."
+  success:
+    - "&7"
+    - "&33FF33Restored grave &f#%id%&33FF33 belonging to &f%player%&33FF33 at &f%world% %x%, %y%, %z%&33FF33."
+    - "&7"
+  not-found:
+    - "&7"
+    - "&FF3333No grave &f#%id%&FF3333 found for &f%player%&FF3333."
+    - "&7"
+  already-restored:
+    - "&7"
+    - "&FF3333Grave &f#%id%&FF3333 has already been restored."
+    - "&7"
+  failed:
+    - "&7"
+    - "&FF3333Failed to restore grave &f#%id%&FF3333. See console for details."
+    - "&7"
+  unsupported:
+    - "&7"
+    - "&FF3333Grave history and restore require H2, SQLite or MySQL storage."
+    - "&7"
 
 grave-list:
-  header: "&#FF00FF&l=== GRAVES ==="
-  grave: "&#FF00FF[TP] &#FFAAFF%player% &7- &#FFAAFF%world% %x%, %y%, %z% &7(%time%)"
-  no-graves: "&#FFAAFFNo graves found!"
+  header:
+    - "&7"
+    - "&FF00FF&l=== GRAVES ==="
+  grave:
+    - "&FF00FF[TP] &FFAAFF%player% &7- &FFAAFF%world% %x%, %y%, %z% &7(%time%)"
+  no-graves:
+    - "&7"
+    - "&FFAAFFNo graves found!"
+    - "&7"
 
 commands:
-  invalid-value: "&#FF0000Invalid parameter: &#BB0000%value%"
-  invalid-command: "&#FF0000Invalid command or subcommand!"
-  missing-argument: "&#FF0000Missing argument! You must specify a value for &#BB0000%value%&#FF0000."
-  no-permission: "&#FF0000You don't have permission to access this command!"
-  out-of-range: "&#FF0000The &#BB0000%number% &#FF0000must be between &#BB0000%min% &#FF0000and &#BB0000%max%&#FF0000!"
-  player-only: "&#FF0000You must be a player to use this command!"
-  invalid-player: "&#FF0000The player &#BB0000%player% &#FF0000can not be found!"
-  invalid-selector: "&#FF0000You can not use this selector in this command!"
+  invalid-value:
+    - "&7"
+    - "&FF0000Invalid parameter: &BB0000%value%"
+    - "&7"
+  invalid-command:
+    - "&7"
+    - "&FF0000Invalid command or subcommand."
+    - "&7"
+  missing-argument:
+    - "&7"
+    - "&FF0000Missing argument: &BB0000%value%&FF0000."
+    - "&7"
+  no-permission:
+    - "&7"
+    - "&FF0000You don't have permission to use this command."
+    - "&7"
+  out-of-range:
+    - "&7"
+    - "&FF0000The &BB0000%number% &FF0000must be between &BB0000%min% &FF0000and &BB0000%max%&FF0000."
+    - "&7"
+  player-only:
+    - "&7"
+    - "&FF0000You must be a player to use this command."
+    - "&7"
+  invalid-player:
+    - "&7"
+    - "&FF0000The player &BB0000%player% &FF0000could not be found."
+    - "&7"
+  invalid-selector:
+    - "&7"
+    - "&FF0000Selectors are not supported by this command."
+    - "&7"
 
-update-notifier: "&#FF88FFThere is a new version of AxGraves available! &#DDDDDD(&#FFFFFFcurrent: &#FF0000%current% &#DDDDDD| &#FFFFFFlatest: &#00FF00%latest%&#DDDDDD)"
+update-notifier:
+  - "&7"
+  - "&FF88FFThere is a new CloverGraves version available. &DDDDDD(&FFFFFFcurrent: &FF0000%current% &DDDDDD| &FFFFFFlatest: &00FF00%latest%&DDDDDD)"
+  - "&7"
 
-# do not edit
-version: 9
+version: 10

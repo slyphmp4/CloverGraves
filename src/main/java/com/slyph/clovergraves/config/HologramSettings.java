@@ -1,7 +1,7 @@
 package com.slyph.clovergraves.config;
 
-import com.artillexstudios.axapi.libs.boostedyaml.block.implementation.Section;
 import com.slyph.clovergraves.utils.CloverLogger;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.TextDisplay;
 import org.jetbrains.annotations.NotNull;
@@ -9,24 +9,23 @@ import org.jetbrains.annotations.Nullable;
 
 public record HologramSettings(boolean seeThrough, boolean shadow, TextDisplay.TextAlignment alignment,
                                int backgroundColor, Display.Billboard billboard) {
-
     private static final int DEFAULT_BACKGROUND = 0x00000000;
     private static final TextDisplay.TextAlignment DEFAULT_ALIGNMENT = TextDisplay.TextAlignment.CENTER;
     private static final Display.Billboard DEFAULT_BILLBOARD = Display.Billboard.VERTICAL;
 
     @NotNull
-    public static HologramSettings parse(@Nullable Section section) {
+    public static HologramSettings parse(@Nullable ConfigurationSection section) {
         if (section == null) {
             return new HologramSettings(false, true, DEFAULT_ALIGNMENT, DEFAULT_BACKGROUND, DEFAULT_BILLBOARD);
         }
 
-        boolean seeThrough = section.getBoolean("see-through", false);
-        boolean shadow = section.getBoolean("shadow", true);
-        TextDisplay.TextAlignment alignment = parseAlignment(section.getString("alignment"));
-        Display.Billboard billboard = parseBillboard(section.getString("billboard"));
-        int backgroundColor = parseColor(section.getString("background-color"));
-
-        return new HologramSettings(seeThrough, shadow, alignment, backgroundColor, billboard);
+        return new HologramSettings(
+                section.getBoolean("see-through", false),
+                section.getBoolean("shadow", true),
+                parseAlignment(section.getString("alignment")),
+                parseColor(section.getString("background-color")),
+                parseBillboard(section.getString("billboard"))
+        );
     }
 
     static int parseColor(@Nullable String raw) {
@@ -34,7 +33,7 @@ public record HologramSettings(boolean seeThrough, boolean shadow, TextDisplay.T
         try {
             return Integer.parseUnsignedInt(raw.trim(), 16);
         } catch (NumberFormatException ex) {
-            CloverLogger.warn("invalid holograms.background-color '{}', expected an 8-digit AARRGGBB hex value, using default", raw);
+            CloverLogger.warn("invalid holograms.background-color '{}', using default", raw);
             return DEFAULT_BACKGROUND;
         }
     }

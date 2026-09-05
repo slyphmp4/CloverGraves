@@ -1,35 +1,40 @@
 package com.slyph.clovergraves.utils;
 
 import org.bukkit.Material;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+
+import java.util.Locale;
 
 import static com.slyph.clovergraves.AxGraves.CONFIG;
 
 public class BlacklistUtils {
+    public static boolean isBlacklisted(ItemStack item) {
+        if (item == null) return false;
+        ConfigurationSection section = CONFIG.getSection("blacklisted-items");
+        if (section == null) return false;
 
-    public static boolean isBlacklisted(ItemStack it) {
-        if (it == null) return false;
-
-        if (CONFIG.getSection("blacklisted-items") == null) return false;
-        for (String s : CONFIG.getSection("blacklisted-items").getRoutesAsStrings(false)) {
+        for (String key : section.getKeys(false)) {
+            String base = "blacklisted-items." + key + '.';
             boolean banned = false;
 
-            if (CONFIG.getString("blacklisted-items." + s + ".material") != null) {
-                final Material mt = Material.getMaterial(CONFIG.getString("blacklisted-items." + s + ".material").toUpperCase());
-                if (mt == null) continue;
-                if (!it.getType().equals(mt)) continue;
+            String materialName = CONFIG.getString(base + "material");
+            if (materialName != null) {
+                Material material = Material.getMaterial(materialName.toUpperCase(Locale.ROOT));
+                if (material == null || item.getType() != material) continue;
                 banned = true;
             }
 
-            if (CONFIG.getString("blacklisted-items." + s + ".name-contains") != null) {
-                if (it.getItemMeta() == null) continue;
-                if (!it.getItemMeta().getDisplayName().contains(CONFIG.getString("blacklisted-items." + s + ".name-contains"))) continue;
+            String nameContains = CONFIG.getString(base + "name-contains");
+            if (nameContains != null) {
+                ItemMeta meta = item.getItemMeta();
+                if (meta == null || !meta.hasDisplayName() || !meta.getDisplayName().contains(nameContains)) continue;
                 banned = true;
             }
 
             if (banned) return true;
         }
-
         return false;
     }
 }

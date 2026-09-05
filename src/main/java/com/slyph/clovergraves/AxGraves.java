@@ -1,41 +1,29 @@
 package com.slyph.clovergraves;
 
-import com.artillexstudios.axapi.AxPlugin;
-import com.artillexstudios.axapi.config.Config;
-import com.artillexstudios.axapi.database.DatabaseConfig;
-import com.artillexstudios.axapi.database.impl.H2DatabaseType;
-import com.artillexstudios.axapi.database.impl.MySQLDatabaseType;
-import com.artillexstudios.axapi.database.impl.SQLiteDatabaseType;
-import com.artillexstudios.axapi.dependencies.DependencyManagerWrapper;
-import com.artillexstudios.axapi.libs.boostedyaml.dvs.versioning.BasicVersioning;
-import com.artillexstudios.axapi.libs.boostedyaml.settings.dumper.DumperSettings;
-import com.artillexstudios.axapi.libs.boostedyaml.settings.general.GeneralSettings;
-import com.artillexstudios.axapi.libs.boostedyaml.settings.loader.LoaderSettings;
-import com.artillexstudios.axapi.libs.boostedyaml.settings.updater.UpdaterSettings;
-import com.artillexstudios.axapi.metrics.AxMetrics;
-import com.artillexstudios.axapi.scheduler.Scheduler;
-import com.artillexstudios.axapi.serializers.Serializers;
-import com.artillexstudios.axapi.utils.featureflags.FeatureFlags;
-import com.artillexstudios.axapi.utils.logging.LogUtils;
 import com.slyph.clovergraves.commands.CommandManager;
+import com.slyph.clovergraves.compat.CardboardCompatibilitySelfTest;
+import com.slyph.clovergraves.config.CloverConfig;
 import com.slyph.clovergraves.config.GraveSettings;
 import com.slyph.clovergraves.grave.Grave;
-import com.slyph.clovergraves.grave.GravePlaceholders;
 import com.slyph.clovergraves.grave.SpawnedGraves;
+import com.slyph.clovergraves.hooks.placeholder.PlaceholderHook;
 import com.slyph.clovergraves.listeners.DeathListener;
 import com.slyph.clovergraves.listeners.GraveEntityInteractListener;
 import com.slyph.clovergraves.listeners.GraveInventoryListener;
 import com.slyph.clovergraves.listeners.PlayerInteractListener;
 import com.slyph.clovergraves.listeners.TeleportCancelListener;
+import com.slyph.clovergraves.schedulers.CloverScheduler;
 import com.slyph.clovergraves.schedulers.SaveGraves;
 import com.slyph.clovergraves.storage.EndReason;
 import com.slyph.clovergraves.storage.GraveRecord;
 import com.slyph.clovergraves.storage.GraveStorage;
 import com.slyph.clovergraves.storage.ItemSerialization;
+import com.slyph.clovergraves.storage.JdbcConfig;
 import com.slyph.clovergraves.storage.JsonGraveStorage;
-import com.slyph.clovergraves.storage.SqlDrivers;
+import com.slyph.clovergraves.storage.LocationCodec;
 import com.slyph.clovergraves.storage.SqlGraveStorage;
 import com.slyph.clovergraves.storage.StorageMigration;
+import com.slyph.clovergraves.utils.CloverLogger;
 import com.slyph.clovergraves.utils.InventoryOrderSnapshot;
 import com.slyph.clovergraves.utils.MessageService;
 import com.slyph.clovergraves.utils.UpdateNotifier;
@@ -44,6 +32,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
@@ -53,14 +42,19 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public final class AxGraves extends AxPlugin {
-    private static AxPlugin instance;
-    public static Config CONFIG;
-    public static Config LANG;
+public final class AxGraves extends JavaPlugin {
+    private static AxGraves instance;
+    public static CloverConfig CONFIG;
+    public static CloverConfig LANG;
     public static MessageService MESSAGEUTILS;
     public static ScheduledExecutorService EXECUTOR;
-    private static AxMetrics metrics;
     private static boolean debugMode;
+
+    @NotNull
+    public static AxGraves getInstance() {
+        if (instance == null) throw new IllegalStateException("CloverGraves is not enabled");
+        return instance;
+    }
 
     public static boolean isDebugMode() {
         return debugMode;
@@ -70,23 +64,28 @@ public final class AxGraves extends AxPlugin {
         AxGraves.debugMode = debugMode;
     }
 
-    public static AxPlugin getInstance() {
-        return instance;
-    }
-
-    public void enable() {
+    @Override
+    public void onEnable() {
         instance = this;
+        CloverLogger.bind(getLogger());
+        CloverScheduler.init(this);
 
-        new Metrics(this, 20332);
-
-        CONFIG = new Config(new File(getDataFolder(), "config.yml"), getResource("config.yml"), GeneralSettings.builder().setUseDefaults(false).build(), LoaderSettings.builder().setAutoUpdate(true).build(), DumperSettings.DEFAULT, UpdaterSettings.builder().setVersioning(new BasicVersioning("version")).build());
-        LANG = new Config(new File(getDataFolder(), "messages.yml"), getResource("messages.yml"), GeneralSettings.builder().setUseDefaults(false).build(), LoaderSettings.builder().setAutoUpdate(true).build(), DumperSettings.DEFAULT, UpdaterSettings.builder().setVersioning(new BasicVersioning("version")).build());
-
-        debugMode = CONFIG.getBoolean("debug", false);
+        CONFIG = new CloverConfig(this, "config.yml");
+        LANG = new CloverConfig(this, "messages.yml");
         MESSAGEUTILS = new MessageService(LANG, "prefix", CONFIG);
+        debugMode = CONFIG.getBoolean("debug", false);
         GraveSettings.reload(CONFIG);
 
-        EXECUTOR = Executors.newSingleThreadScheduledExecutor();
+        EXECUTOR = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform()
+                .name("CloverGraves-Storage", 0)
+                .daemon(true)
+                .factory());
+
+        try {
+            new Metrics(this, 20332);
+        } catch (Throwable ex) {
+            CloverLogger.warn("bStats could not be initialized: {}", ex.getMessage());
+        }
 
         new DeathListener();
         getServer().getPluginManager().registerEvents(new PlayerInteractListener(), this);
@@ -95,59 +94,50 @@ public final class AxGraves extends AxPlugin {
         getServer().getPluginManager().registerEvents(new TeleportCancelListener(), this);
 
         CommandManager.load();
-        GravePlaceholders.register();
+        PlaceholderHook.register();
 
         GraveStorage storage = createStorage();
         SpawnedGraves.setStorage(storage);
-
         if (CONFIG.getBoolean("save-graves.enabled", true)) {
-            for (GraveRecord record : storage.loadAll()) {
-                restoreGrave(record);
-            }
+            for (GraveRecord record : storage.loadAll()) restoreGrave(record);
         }
 
         SaveGraves.start();
-
-        metrics = new AxMetrics(this, 20);
-        metrics.start();
-
-        UpdateNotifier.init(CONFIG, LANG);
+        UpdateNotifier.init(CONFIG);
         if (CONFIG.getBoolean("update-notifier.enabled", true)) new UpdateNotifier();
 
-        String brand = (Bukkit.getName() + " " + Bukkit.getVersion()).toLowerCase(Locale.ROOT);
-        if (brand.contains("cardboard") && "26.2".equals(Bukkit.getMinecraftVersion())) {
-            getLogger().info("Cardboard 26.2 detected. Cardboard-safe Bukkit entity and interaction backend enabled.");
+        String server = (Bukkit.getName() + " " + Bukkit.getVersion()).toLowerCase(Locale.ROOT);
+        if (server.contains("cardboard") && "26.2".equals(Bukkit.getMinecraftVersion())) {
+            CloverLogger.info("Cardboard 26.2 detected; CloverGraves is using the Bukkit-only compatibility backend");
         } else if (!"26.2".equals(Bukkit.getMinecraftVersion())) {
-            getLogger().warning("CloverGraves is built and tested against Minecraft/Cardboard 26.2. Current Minecraft version: " + Bukkit.getMinecraftVersion());
+            CloverLogger.warn("CloverGraves targets Minecraft/Cardboard 26.2; detected Minecraft {}", Bukkit.getMinecraftVersion());
         }
-    }
 
-    @Override
-    public void dependencies(DependencyManagerWrapper wrapper) {
-        SqlDrivers.declare(wrapper);
+        if (Boolean.getBoolean("clovergraves.compatTest")) {
+            Bukkit.getScheduler().runTaskLater(this, CardboardCompatibilitySelfTest::run, 20L);
+        }
     }
 
     @NotNull
     private GraveStorage createStorage() {
-        String type = CONFIG.getString("storage.type", "H2").trim().toUpperCase();
+        String type = CONFIG.getString("storage.type", "H2").trim().toUpperCase(Locale.ROOT);
         boolean historyEnabled = CONFIG.getBoolean("history.enabled", true);
         int keepPerPlayer = CONFIG.getInt("history.keep-per-player", 5);
         int keepDays = CONFIG.getInt("history.keep-days", 14);
         String tablePrefix = CONFIG.getString("storage.table-prefix", "axgraves_");
 
         try {
-            DatabaseConfig dbConfig = switch (type) {
-                case "SQLITE" -> embeddedConfig(new SQLiteDatabaseType(SqlDrivers.SQLITE_RELOCATION), tablePrefix);
+            JdbcConfig jdbc = switch (type) {
+                case "SQLITE" -> sqliteConfig(tablePrefix);
                 case "MYSQL" -> mysqlConfig(tablePrefix);
-                default -> embeddedConfig(new H2DatabaseType(SqlDrivers.H2_RELOCATION), tablePrefix);
+                default -> h2Config(tablePrefix);
             };
-
-            SqlGraveStorage sql = new SqlGraveStorage(dbConfig, historyEnabled, keepPerPlayer, keepDays);
+            SqlGraveStorage sql = new SqlGraveStorage(jdbc, historyEnabled, keepPerPlayer, keepDays);
             sql.init();
             StorageMigration.migrateIfNeeded(getDataFolder(), sql);
             return sql;
         } catch (Throwable throwable) {
-            LogUtils.error("failed to initialize {} storage - falling back to the JSON file backend (no grave history/restore until this is fixed)", type, throwable);
+            CloverLogger.error("failed to initialize {} storage; falling back to JSON", type, throwable);
             JsonGraveStorage json = new JsonGraveStorage(getDataFolder());
             json.init();
             return json;
@@ -155,40 +145,38 @@ public final class AxGraves extends AxPlugin {
     }
 
     @NotNull
-    private DatabaseConfig embeddedConfig(com.artillexstudios.axapi.database.DatabaseType type, String tablePrefix) {
-        DatabaseConfig config = new DatabaseConfig();
-        config.type = type;
-        config.database = new File(getDataFolder(), "data").getAbsolutePath();
-        config.tablePrefix(tablePrefix);
-        return config;
+    private JdbcConfig h2Config(String tablePrefix) {
+        File data = new File(getDataFolder(), "data");
+        return new JdbcConfig(JdbcConfig.Type.H2,
+                "jdbc:h2:file:" + data.getAbsolutePath() + ";DB_CLOSE_ON_EXIT=FALSE", "", "", tablePrefix);
     }
 
     @NotNull
-    private DatabaseConfig mysqlConfig(String tablePrefix) {
-        DatabaseConfig config = new DatabaseConfig();
-        config.type = new MySQLDatabaseType();
-        config.address = CONFIG.getString("storage.mysql.address", "127.0.0.1");
-        config.port = CONFIG.getInt("storage.mysql.port", 3306);
-        config.database = CONFIG.getString("storage.mysql.database", "axgraves");
-        config.username = CONFIG.getString("storage.mysql.username", "root");
-        config.password = CONFIG.getString("storage.mysql.password", "");
-        config.tablePrefix(tablePrefix);
+    private JdbcConfig sqliteConfig(String tablePrefix) {
+        File data = new File(getDataFolder(), "data");
+        return new JdbcConfig(JdbcConfig.Type.SQLITE, "jdbc:sqlite:" + data.getAbsolutePath(), "", "", tablePrefix);
+    }
 
-        if (config.pool == null) config.pool = new DatabaseConfig.Pool();
-        config.pool.maximumPoolSize = CONFIG.getInt("storage.mysql.pool.maximum-pool-size", 10);
-        config.pool.minimumIdle = CONFIG.getInt("storage.mysql.pool.minimum-idle", 10);
-
-        return config;
+    @NotNull
+    private JdbcConfig mysqlConfig(String tablePrefix) {
+        String address = CONFIG.getString("storage.mysql.address", "127.0.0.1");
+        int port = CONFIG.getInt("storage.mysql.port", 3306);
+        String database = CONFIG.getString("storage.mysql.database", "axgraves");
+        String username = CONFIG.getString("storage.mysql.username", "root");
+        String password = CONFIG.getString("storage.mysql.password", "");
+        String url = "jdbc:mysql://" + address + ':' + port + '/' + database
+                + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
+        return new JdbcConfig(JdbcConfig.Type.MYSQL, url, username, password, tablePrefix);
     }
 
     private void restoreGrave(GraveRecord record) {
-        Location location = Serializers.LOCATION.deserialize(record.location());
+        Location location = LocationCodec.deserialize(record.location());
         if (location == null || location.getWorld() == null) {
-            LogUtils.warn("skipping a saved grave for {} - its world is not loaded", record.owner());
+            CloverLogger.warn("skipping a saved grave for {}; its world is not loaded", record.owner());
             return;
         }
 
-        Scheduler.get().runAt(location, task -> {
+        CloverScheduler.get().runAt(location, () -> {
             try {
                 OfflinePlayer owner = Bukkit.getOfflinePlayer(record.owner());
                 ItemStack[] items = ItemSerialization.deserialize(record.items());
@@ -196,41 +184,37 @@ public final class AxGraves extends AxPlugin {
                 grave.assignStorageId(record.id());
                 SpawnedGraves.addGrave(grave);
             } catch (Exception ex) {
-                LogUtils.error("failed to restore a saved grave for {}", record.owner(), ex);
+                CloverLogger.error("failed to restore a saved grave for {}", record.owner(), ex);
             }
         });
     }
 
-    public void disable() {
-        if (metrics != null) metrics.cancel();
-
+    @Override
+    public void onDisable() {
         SaveGraves.stop();
-
         GraveStorage storage = SpawnedGraves.storage();
-        boolean persisting = CONFIG != null && CONFIG.getBoolean("save-graves.enabled", true) && storage != null;
+        boolean persist = CONFIG != null && CONFIG.getBoolean("save-graves.enabled", true) && storage != null;
 
         for (Grave grave : SpawnedGraves.getGraves()) {
-            if (!persisting) {
+            if (!persist) {
                 grave.remove(EndReason.SHUTDOWN);
                 continue;
             }
-
             try {
                 grave.contents().refreshSnapshot();
             } catch (Exception ex) {
-                LogUtils.error("failed to refresh snapshot for a grave during shutdown - it may not reflect its final state", ex);
+                CloverLogger.error("failed to refresh a grave snapshot during shutdown", ex);
             }
             if (grave.getEntity() != null) grave.getEntity().remove();
             if (grave.getHologram() != null) grave.getHologram().remove();
         }
 
-        if (persisting) SaveGraves.flushDirty();
-
+        if (persist) SaveGraves.flushDirty();
         if (storage != null) {
             try {
                 storage.close();
             } catch (Exception ex) {
-                LogUtils.error("failed to close grave storage", ex);
+                CloverLogger.error("failed to close grave storage", ex);
             }
         }
 
@@ -243,14 +227,8 @@ public final class AxGraves extends AxPlugin {
                 EXECUTOR.shutdownNow();
             }
         }
-    }
 
-    public void updateFlags() {
-        FeatureFlags.USE_LEGACY_HEX_FORMATTER.set(true);
-        FeatureFlags.PACKET_ENTITY_TRACKER_ENABLED.set(false);
-        FeatureFlags.PACKET_ENTITY_TRACKER_THREADS.set(1);
-        FeatureFlags.ENABLE_PACKET_LISTENERS.set(false);
-        FeatureFlags.PLACEHOLDER_API_HOOK.set(true);
-        FeatureFlags.PLACEHOLDER_API_IDENTIFIER.set("axgraves");
+        CloverScheduler.get().shutdown();
+        instance = null;
     }
 }

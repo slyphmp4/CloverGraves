@@ -1,11 +1,10 @@
 package com.slyph.clovergraves.commands.subcommands;
 
-import com.artillexstudios.axapi.scheduler.Scheduler;
-import com.artillexstudios.axapi.utils.PaperUtils;
-import com.artillexstudios.axapi.utils.StringUtils;
 import com.slyph.clovergraves.grave.Grave;
 import com.slyph.clovergraves.grave.SpawnedGraves;
+import com.slyph.clovergraves.schedulers.CloverScheduler;
 import com.slyph.clovergraves.utils.EconomyHook;
+import com.slyph.clovergraves.utils.TextFormatter;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
@@ -19,20 +18,6 @@ import java.util.UUID;
 import static com.slyph.clovergraves.AxGraves.CONFIG;
 import static com.slyph.clovergraves.AxGraves.MESSAGEUTILS;
 
-/**
- * {@code /axgraves tp} and {@code /bibingka grave tp} - both route here (see
- * {@code Commands}). Not instant: a per-second countdown runs first
- * ({@code teleport.warmup-seconds}, default 5), during which moving or taking damage cancels it
- * (see {@link com.slyph.clovergraves.listeners.TeleportCancelListener}). A successful
- * teleport starts a cooldown ({@code teleport.cooldown-seconds}, default 60) before the command
- * can be used again - a cancelled warmup does not consume it.
- *
- * <p>If {@code teleport.cost} is above 0, the first invocation only checks the player can afford
- * it and prompts them to run the command again within {@code teleport.confirmation-timeout-seconds}
- * to confirm - it does not charge or start the warmup yet. The actual charge happens at the very
- * end, right before the teleport itself, so a warmup that gets cancelled by moving/taking damage
- * never costs anything.</p>
- */
 public enum Teleport {
     INSTANCE;
 
@@ -41,7 +26,6 @@ public enum Teleport {
         if (target == null) return;
 
         UUID uuid = sender.getUniqueId();
-
         if (TeleportWarmups.isPending(uuid)) {
             MESSAGEUTILS.sendLang(sender, "teleport.already-pending");
             return;
@@ -50,13 +34,12 @@ public enum Teleport {
         int cooldownSeconds = CONFIG.getInt("teleport.cooldown-seconds", 60);
         long remaining = TeleportWarmups.remainingCooldownMillis(uuid, cooldownSeconds * 1_000L);
         if (remaining > 0) {
-            MESSAGEUTILS.sendLang(sender, "teleport.cooldown", Map.of("%time%", StringUtils.formatTime(remaining)));
+            MESSAGEUTILS.sendLang(sender, "teleport.cooldown", Map.of("%time%", TextFormatter.formatTime(remaining)));
             return;
         }
 
-        double cost = CONFIG.getDouble("teleport.cost", 0);
+        double cost = Math.max(0, CONFIG.getDouble("teleport.cost", 0));
         String symbol = CONFIG.getString("teleport.currency-symbol", "$");
-
         if (cost > 0 && !TeleportConfirmations.consumeIfConfirmed(uuid)) {
             promptConfirmation(sender, uuid, cost, symbol);
             return;
@@ -69,7 +52,8 @@ public enum Teleport {
         if (!EconomyHook.has(sender, cost)) {
             MESSAGEUTILS.sendLang(sender, "teleport.cost-insufficient", Map.of(
                     "%cost%", EconomyHook.format(cost, symbol),
-                    "%balance%", EconomyHook.format(EconomyHook.balance(sender), symbol)));
+                    "%balance%", EconomyHook.format(EconomyHook.balance(sender), symbol)
+            ));
             return;
         }
 
@@ -77,7 +61,8 @@ public enum Teleport {
         TeleportConfirmations.markConfirmable(uuid, confirmSeconds);
         MESSAGEUTILS.sendLang(sender, "teleport.cost-confirm", Map.of(
                 "%cost%", EconomyHook.format(cost, symbol),
-                "%seconds%", String.valueOf(confirmSeconds)));
+                "%seconds%", String.valueOf(confirmSeconds)
+        ));
     }
 
     private void startWarmup(Player sender, UUID uuid, Location target, double cost, String symbol) {
@@ -90,18 +75,12 @@ public enum Teleport {
         TeleportWarmups.startPending(uuid, sender.getLocation());
         MESSAGEUTILS.sendLang(sender, "teleport.warmup-start", Map.of("%seconds%", String.valueOf(warmupSeconds)));
 
-        // one independent one-shot task per second, rather than a single repeating/self-
-        // cancelling timer - avoids any race between scheduling a task and holding a reference
-        // to cancel it, and each callback simply no-ops if TeleportWarmups no longer has this
-        // player pending (i.e. the countdown was cancelled by movement/damage/quit).
         for (int second = 1; second <= warmupSeconds; second++) {
-            boolean isLast = second == warmupSeconds;
+            boolean last = second == warmupSeconds;
             int secondsLeft = warmupSeconds - second;
-
-            Scheduler.get().runLater(sender, task -> {
+            CloverScheduler.get().runLater(sender, task -> {
                 if (!TeleportWarmups.isPending(uuid)) return;
-
-                if (isLast) {
+                if (last) {
                     TeleportWarmups.clear(uuid);
                     completeTeleport(sender, uuid, target, cost, symbol);
                 } else {
@@ -113,28 +92,32 @@ public enum Teleport {
 
     private void completeTeleport(Player sender, UUID uuid, Location target, double cost, String symbol) {
         if (cost > 0) {
-            // re-checked here, not just at confirmation time - the player could have spent the
-            // money elsewhere during the confirmation window or the warmup countdown.
             if (!EconomyHook.has(sender, cost) || !EconomyHook.withdraw(sender, cost)) {
                 MESSAGEUTILS.sendLang(sender, "teleport.cost-insufficient", Map.of(
                         "%cost%", EconomyHook.format(cost, symbol),
-                        "%balance%", EconomyHook.format(EconomyHook.balance(sender), symbol)));
+                        "%balance%", EconomyHook.format(EconomyHook.balance(sender), symbol)
+                ));
                 return;
             }
             MESSAGEUTILS.sendLang(sender, "teleport.cost-charged", Map.of("%cost%", EconomyHook.format(cost, symbol)));
         }
 
+        if (!sender.teleport(target)) {
+            MESSAGEUTILS.sendLang(sender, "teleport.cancelled");
+            return;
+        }
+
         TeleportWarmups.markUsed(uuid);
         MESSAGEUTILS.sendLang(sender, "teleport.warmup-complete");
-        PaperUtils.teleportAsync(sender, target);
     }
 
     @Nullable
     private Location resolveTarget(Player sender, World world, Double x, Double y, Double z) {
         if (world == null || x == null || y == null || z == null) {
             Grave grave = SpawnedGraves.getGraves().stream()
-                    .filter(gr -> gr.getPlayer().getUniqueId().equals(sender.getUniqueId()))
-                    .findAny().orElse(null);
+                    .filter(value -> value.getPlayer().getUniqueId().equals(sender.getUniqueId()))
+                    .min(java.util.Comparator.comparingLong(Grave::getSpawned).reversed())
+                    .orElse(null);
             if (grave == null) {
                 MESSAGEUTILS.sendLang(sender, "grave-list.no-graves");
                 return null;
@@ -142,18 +125,18 @@ public enum Teleport {
             return grave.getLocation().clone().add(0, 0.5, 0);
         }
 
-        final Location location = new Location(world, x, y, z);
+        Location requested = new Location(world, x, y, z);
         Optional<Grave> grave = SpawnedGraves.getGraves().stream()
-                .filter(gr -> gr.getPlayer().getUniqueId().equals(sender.getUniqueId()))
-                .filter(gr -> Objects.equals(gr.getLocation().getWorld(), location.getWorld()))
-                .filter(gr -> gr.getLocation().distanceSquared(location) < 1)
-                .findAny();
+                .filter(value -> value.getPlayer().getUniqueId().equals(sender.getUniqueId()))
+                .filter(value -> Objects.equals(value.getLocation().getWorld(), requested.getWorld()))
+                .filter(value -> value.getLocation().distanceSquared(requested) < 1)
+                .findFirst();
 
         if (!sender.hasPermission("axgraves.tp.bypass") && grave.isEmpty()) {
             MESSAGEUTILS.sendLang(sender, "commands.no-permission");
             return null;
         }
 
-        return grave.map(value -> value.getLocation().clone().add(0, 0.5, 0)).orElse(location);
+        return grave.map(value -> value.getLocation().clone().add(0, 0.5, 0)).orElse(requested);
     }
 }
