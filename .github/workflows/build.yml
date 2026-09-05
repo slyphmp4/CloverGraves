@@ -135,10 +135,73 @@ jobs:
           fi
 
       - name: Upload CloverGraves jar
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CloverGraves-${{ github.sha }}
           path: |
             build/libs/CloverGraves-*.jar
             !build/libs/*-unshaded.jar
           if-no-files-found: error
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/rewrite' && github.event.head_commit.message == 'Release CloverGraves 2.0.0'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download verified CloverGraves jar
+        uses: actions/download-artifact@v8
+        with:
+          name: CloverGraves-${{ github.sha }}
+          path: release
+
+      - name: Publish CloverGraves 2.0.0
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG='v2.0.0'
+          JAR="$(find release -maxdepth 1 -name 'CloverGraves-*.jar' ! -name '*-unshaded.jar' | head -n 1)"
+          test -n "$JAR"
+          mv "$JAR" release/CloverGraves-2.0.0.jar
+          sha256sum release/CloverGraves-2.0.0.jar | sed 's#release/##' > release/SHA256SUMS.txt
+
+          cat > release-notes.md <<'NOTES'
+          CloverGraves 2.0.0 is the first public CloverGraves release: a modernized grave/death-chest plugin focused on Minecraft 26.2 and real Paper/Cardboard compatibility.
+
+          ### Highlights
+          - Stores a player's items and experience in a grave on death.
+          - Native TextDisplay holograms with a protected player-head grave marker.
+          - Right-click to open a grave; Sneak + Right-click for instant pickup.
+          - Configurable virtual interaction hitbox for reliable grave targeting.
+          - Correct XP ownership: stored XP is removed on death and returned only from the grave.
+          - Grave protection, ownership checks, safe placement and configurable despawn behavior.
+          - Persistent storage with H2, SQLite and MySQL, plus JSON fallback/migration support.
+          - Grave history/restore and teleport commands.
+          - Optional PlaceholderAPI and Vault integrations.
+
+          ### Compatibility
+          - Minecraft: 26.2
+          - Java: 25
+          - Paper API: 26.2 build 110 stable
+          - Cardboard: tested in CI against `slyphmp4/Cardboard` commit `5b62d59716f5a7d6dc0fa780ea7ca527e79272a5`
+
+          ### Verification
+          The release asset is produced only after the Gradle build, tests, JAR audit, Cardboard 26.2 build and runtime TextDisplay smoke-test pass. `SHA256SUMS.txt` is included with the release assets.
+          NOTES
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/CloverGraves-2.0.0.jar release/SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --title 'CloverGraves 2.0.0' --notes-file release-notes.md --latest --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release/CloverGraves-2.0.0.jar release/SHA256SUMS.txt \
+              --target "$GITHUB_SHA" \
+              --title 'CloverGraves 2.0.0' \
+              --notes-file release-notes.md \
+              --latest \
+              --repo "$GITHUB_REPOSITORY"
+          fi
