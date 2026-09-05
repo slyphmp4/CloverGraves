@@ -15,7 +15,6 @@ import com.artillexstudios.axapi.libs.boostedyaml.settings.updater.UpdaterSettin
 import com.artillexstudios.axapi.metrics.AxMetrics;
 import com.artillexstudios.axapi.scheduler.Scheduler;
 import com.artillexstudios.axapi.serializers.Serializers;
-import com.artillexstudios.axapi.utils.MessageUtils;
 import com.artillexstudios.axapi.utils.featureflags.FeatureFlags;
 import com.artillexstudios.axapi.utils.logging.LogUtils;
 import com.slyph.clovergraves.commands.CommandManager;
@@ -24,6 +23,7 @@ import com.slyph.clovergraves.grave.Grave;
 import com.slyph.clovergraves.grave.GravePlaceholders;
 import com.slyph.clovergraves.grave.SpawnedGraves;
 import com.slyph.clovergraves.listeners.DeathListener;
+import com.slyph.clovergraves.listeners.GraveEntityInteractListener;
 import com.slyph.clovergraves.listeners.GraveInventoryListener;
 import com.slyph.clovergraves.listeners.PlayerInteractListener;
 import com.slyph.clovergraves.listeners.TeleportCancelListener;
@@ -31,11 +31,13 @@ import com.slyph.clovergraves.schedulers.SaveGraves;
 import com.slyph.clovergraves.storage.EndReason;
 import com.slyph.clovergraves.storage.GraveRecord;
 import com.slyph.clovergraves.storage.GraveStorage;
+import com.slyph.clovergraves.storage.ItemSerialization;
 import com.slyph.clovergraves.storage.JsonGraveStorage;
 import com.slyph.clovergraves.storage.SqlDrivers;
 import com.slyph.clovergraves.storage.SqlGraveStorage;
 import com.slyph.clovergraves.storage.StorageMigration;
 import com.slyph.clovergraves.utils.InventoryOrderSnapshot;
+import com.slyph.clovergraves.utils.MessageService;
 import com.slyph.clovergraves.utils.UpdateNotifier;
 import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
@@ -46,6 +48,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -54,7 +57,7 @@ public final class AxGraves extends AxPlugin {
     private static AxPlugin instance;
     public static Config CONFIG;
     public static Config LANG;
-    public static MessageUtils MESSAGEUTILS;
+    public static MessageService MESSAGEUTILS;
     public static ScheduledExecutorService EXECUTOR;
     private static AxMetrics metrics;
     private static boolean debugMode;
@@ -80,15 +83,14 @@ public final class AxGraves extends AxPlugin {
         LANG = new Config(new File(getDataFolder(), "messages.yml"), getResource("messages.yml"), GeneralSettings.builder().setUseDefaults(false).build(), LoaderSettings.builder().setAutoUpdate(true).build(), DumperSettings.DEFAULT, UpdaterSettings.builder().setVersioning(new BasicVersioning("version")).build());
 
         debugMode = CONFIG.getBoolean("debug", false);
-        MESSAGEUTILS = new MessageUtils(LANG.getBackingDocument(), "prefix", CONFIG.getBackingDocument());
+        MESSAGEUTILS = new MessageService(LANG, "prefix", CONFIG);
         GraveSettings.reload(CONFIG);
 
-        // created fresh on every enable (rather than as a field initializer) so a plugin
-        // reload/re-enable in the same JVM never resumes with an already-shut-down executor.
         EXECUTOR = Executors.newSingleThreadScheduledExecutor();
 
         new DeathListener();
         getServer().getPluginManager().registerEvents(new PlayerInteractListener(), this);
+        getServer().getPluginManager().registerEvents(new GraveEntityInteractListener(), this);
         getServer().getPluginManager().registerEvents(new GraveInventoryListener(), this);
         getServer().getPluginManager().registerEvents(new TeleportCancelListener(), this);
 
@@ -111,13 +113,17 @@ public final class AxGraves extends AxPlugin {
 
         UpdateNotifier.init(CONFIG, LANG);
         if (CONFIG.getBoolean("update-notifier.enabled", true)) new UpdateNotifier();
+
+        String brand = (Bukkit.getName() + " " + Bukkit.getVersion()).toLowerCase(Locale.ROOT);
+        if (brand.contains("cardboard") && "26.2".equals(Bukkit.getMinecraftVersion())) {
+            getLogger().info("Cardboard 26.2 detected. Cardboard-safe Bukkit entity and interaction backend enabled.");
+        } else if (!"26.2".equals(Bukkit.getMinecraftVersion())) {
+            getLogger().warning("CloverGraves is built and tested against Minecraft/Cardboard 26.2. Current Minecraft version: " + Bukkit.getMinecraftVersion());
+        }
     }
 
     @Override
     public void dependencies(DependencyManagerWrapper wrapper) {
-        // runs during onLoad(), before CONFIG exists - fetched unconditionally since there's no
-        // config to gate on yet. H2 is the default storage.type; see SqlDrivers for why MySQL
-        // isn't fetched here.
         SqlDrivers.declare(wrapper);
     }
 
@@ -140,8 +146,8 @@ public final class AxGraves extends AxPlugin {
             sql.init();
             StorageMigration.migrateIfNeeded(getDataFolder(), sql);
             return sql;
-        } catch (Throwable t) {
-            LogUtils.error("failed to initialize {} storage - falling back to the JSON file backend (no grave history/restore until this is fixed)", type, t);
+        } catch (Throwable throwable) {
+            LogUtils.error("failed to initialize {} storage - falling back to the JSON file backend (no grave history/restore until this is fixed)", type, throwable);
             JsonGraveStorage json = new JsonGraveStorage(getDataFolder());
             json.init();
             return json;
@@ -150,29 +156,29 @@ public final class AxGraves extends AxPlugin {
 
     @NotNull
     private DatabaseConfig embeddedConfig(com.artillexstudios.axapi.database.DatabaseType type, String tablePrefix) {
-        DatabaseConfig cfg = new DatabaseConfig();
-        cfg.type = type;
-        cfg.database = new File(getDataFolder(), "data").getAbsolutePath();
-        cfg.tablePrefix(tablePrefix);
-        return cfg;
+        DatabaseConfig config = new DatabaseConfig();
+        config.type = type;
+        config.database = new File(getDataFolder(), "data").getAbsolutePath();
+        config.tablePrefix(tablePrefix);
+        return config;
     }
 
     @NotNull
     private DatabaseConfig mysqlConfig(String tablePrefix) {
-        DatabaseConfig cfg = new DatabaseConfig();
-        cfg.type = new MySQLDatabaseType();
-        cfg.address = CONFIG.getString("storage.mysql.address", "127.0.0.1");
-        cfg.port = CONFIG.getInt("storage.mysql.port", 3306);
-        cfg.database = CONFIG.getString("storage.mysql.database", "axgraves");
-        cfg.username = CONFIG.getString("storage.mysql.username", "root");
-        cfg.password = CONFIG.getString("storage.mysql.password", "");
-        cfg.tablePrefix(tablePrefix);
+        DatabaseConfig config = new DatabaseConfig();
+        config.type = new MySQLDatabaseType();
+        config.address = CONFIG.getString("storage.mysql.address", "127.0.0.1");
+        config.port = CONFIG.getInt("storage.mysql.port", 3306);
+        config.database = CONFIG.getString("storage.mysql.database", "axgraves");
+        config.username = CONFIG.getString("storage.mysql.username", "root");
+        config.password = CONFIG.getString("storage.mysql.password", "");
+        config.tablePrefix(tablePrefix);
 
-        if (cfg.pool == null) cfg.pool = new DatabaseConfig.Pool();
-        cfg.pool.maximumPoolSize = CONFIG.getInt("storage.mysql.pool.maximum-pool-size", 10);
-        cfg.pool.minimumIdle = CONFIG.getInt("storage.mysql.pool.minimum-idle", 10);
+        if (config.pool == null) config.pool = new DatabaseConfig.Pool();
+        config.pool.maximumPoolSize = CONFIG.getInt("storage.mysql.pool.maximum-pool-size", 10);
+        config.pool.minimumIdle = CONFIG.getInt("storage.mysql.pool.minimum-idle", 10);
 
-        return cfg;
+        return config;
     }
 
     private void restoreGrave(GraveRecord record) {
@@ -185,7 +191,7 @@ public final class AxGraves extends AxPlugin {
         Scheduler.get().runAt(location, task -> {
             try {
                 OfflinePlayer owner = Bukkit.getOfflinePlayer(record.owner());
-                ItemStack[] items = Serializers.ITEM_ARRAY.deserialize(record.items());
+                ItemStack[] items = ItemSerialization.deserialize(record.items());
                 Grave grave = new Grave(location, owner, Arrays.asList(items), record.storedXP(), record.createdAt(), InventoryOrderSnapshot.EMPTY);
                 grave.assignStorageId(record.id());
                 SpawnedGraves.addGrave(grave);
@@ -209,9 +215,6 @@ public final class AxGraves extends AxPlugin {
                 continue;
             }
 
-            // make sure the published snapshot reflects the final state before the last flush -
-            // caught individually so one grave with a malformed item can't throw mid-loop and
-            // skip persisting every grave that comes after it in iteration order
             try {
                 grave.contents().refreshSnapshot();
             } catch (Exception ex) {
@@ -221,9 +224,7 @@ public final class AxGraves extends AxPlugin {
             if (grave.getHologram() != null) grave.getHologram().remove();
         }
 
-        if (persisting) {
-            SaveGraves.flushDirty();
-        }
+        if (persisting) SaveGraves.flushDirty();
 
         if (storage != null) {
             try {
@@ -236,9 +237,7 @@ public final class AxGraves extends AxPlugin {
         if (EXECUTOR != null) {
             EXECUTOR.shutdown();
             try {
-                if (!EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) {
-                    EXECUTOR.shutdownNow();
-                }
+                if (!EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) EXECUTOR.shutdownNow();
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
                 EXECUTOR.shutdownNow();
@@ -248,10 +247,9 @@ public final class AxGraves extends AxPlugin {
 
     public void updateFlags() {
         FeatureFlags.USE_LEGACY_HEX_FORMATTER.set(true);
-        FeatureFlags.PACKET_ENTITY_TRACKER_ENABLED.set(true);
-        FeatureFlags.HOLOGRAM_UPDATE_TICKS.set(5L);
+        FeatureFlags.PACKET_ENTITY_TRACKER_ENABLED.set(false);
         FeatureFlags.PACKET_ENTITY_TRACKER_THREADS.set(1);
-        FeatureFlags.ENABLE_PACKET_LISTENERS.set(true);
+        FeatureFlags.ENABLE_PACKET_LISTENERS.set(false);
         FeatureFlags.PLACEHOLDER_API_HOOK.set(true);
         FeatureFlags.PLACEHOLDER_API_IDENTIFIER.set("axgraves");
     }
