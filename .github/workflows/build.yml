@@ -165,10 +165,13 @@ jobs:
         run: |
           set -euo pipefail
           TAG='v2.0.0'
+          TARGET='release/CloverGraves-2.0.0.jar'
           JAR="$(find release -maxdepth 1 -name 'CloverGraves-*.jar' ! -name '*-unshaded.jar' | head -n 1)"
           test -n "$JAR"
-          mv "$JAR" release/CloverGraves-2.0.0.jar
-          sha256sum release/CloverGraves-2.0.0.jar | sed 's#release/##' > release/SHA256SUMS.txt
+          if [ "$JAR" != "$TARGET" ]; then
+            mv "$JAR" "$TARGET"
+          fi
+          sha256sum "$TARGET" | sed 's#release/##' > release/SHA256SUMS.txt
 
           cat > release-notes.md <<'NOTES'
           CloverGraves 2.0.0 is the first public CloverGraves release: a modernized grave/death-chest plugin focused on Minecraft 26.2 and real Paper/Cardboard compatibility.
@@ -195,10 +198,10 @@ jobs:
           NOTES
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" release/CloverGraves-2.0.0.jar release/SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$TAG" "$TARGET" release/SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
             gh release edit "$TAG" --title 'CloverGraves 2.0.0' --notes-file release-notes.md --latest --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$TAG" release/CloverGraves-2.0.0.jar release/SHA256SUMS.txt \
+            gh release create "$TAG" "$TARGET" release/SHA256SUMS.txt \
               --target "$GITHUB_SHA" \
               --title 'CloverGraves 2.0.0' \
               --notes-file release-notes.md \
