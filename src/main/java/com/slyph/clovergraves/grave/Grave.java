@@ -4,6 +4,8 @@ import com.slyph.clovergraves.api.events.GraveInteractEvent;
 import com.slyph.clovergraves.api.events.GraveOpenEvent;
 import com.slyph.clovergraves.config.GraveSettings;
 import com.slyph.clovergraves.config.HologramSettings;
+import com.slyph.clovergraves.grave.hologram.GraveHologram;
+import com.slyph.clovergraves.grave.hologram.GraveHologramFactory;
 import com.slyph.clovergraves.schedulers.CloverScheduler;
 import com.slyph.clovergraves.schedulers.CloverTask;
 import com.slyph.clovergraves.storage.EndReason;
@@ -15,7 +17,6 @@ import com.slyph.clovergraves.utils.LocationUtils;
 import com.slyph.clovergraves.utils.TextFormatter;
 import com.slyph.clovergraves.utils.Utils;
 import org.bukkit.Bukkit;
-import org.bukkit.Color;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -26,7 +27,6 @@ import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -50,7 +50,6 @@ public class Grave {
     private static final Vector ZERO_VECTOR = new Vector(0, 0, 0);
     private static final long TICK_PERIOD = 2L;
     private static final float HOLOGRAM_LINE_SPACING = 0.3f;
-    private static final int HOLOGRAM_LINE_WIDTH = 1000;
 
     private final long spawned;
     private final Location location;
@@ -65,7 +64,7 @@ public class Grave {
     private final AtomicBoolean removed = new AtomicBoolean(false);
     private final Map<UUID, Long> lastProtectionNotice = new ConcurrentHashMap<>();
 
-    private TextDisplay hologram;
+    private GraveHologram hologram;
     private String lastHologramText = "";
     private long lastHologramUpdateAt;
     private volatile long storageId = -1;
@@ -127,6 +126,7 @@ public class Grave {
                 : LocationUtils.getNearestDirection(location.getYaw());
         entity.setRotation(yaw, 0f);
 
+        contents.refreshSnapshot();
         updateHologram();
         tickTask = CloverScheduler.get().runTimerAt(location, this::tick, TICK_PERIOD, TICK_PERIOD);
     }
@@ -283,22 +283,15 @@ public class Grave {
     public void updateHologram() {
         if (hologram != null) hologram.remove();
 
-        List<String> lines = LANG.getStringList("hologram");
+        long now = System.currentTimeMillis();
+        List<String> formatted = formatHologramLines(now);
         double height = CONFIG.getFloat("hologram-height", 0.75f) + 1;
-        Location hologramLocation = location.clone().add(0, getNewHeight(height, lines.size(), HOLOGRAM_LINE_SPACING), 0);
-
-        hologram = (TextDisplay) location.getWorld().spawnEntity(hologramLocation, EntityType.TEXT_DISPLAY);
+        Location topLocation = location.clone().add(0, height, 0);
         HologramSettings settings = HologramSettings.parse(CONFIG.getSection("holograms"));
-        hologram.setPersistent(false);
-        hologram.setSeeThrough(settings.seeThrough());
-        hologram.setShadowed(settings.shadow());
-        hologram.setAlignment(settings.alignment());
-        hologram.setBackgroundColor(Color.fromARGB(settings.backgroundColor()));
-        hologram.setLineWidth(HOLOGRAM_LINE_WIDTH);
-        hologram.setBillboard(settings.billboard());
-        lastHologramText = "";
-        lastHologramUpdateAt = 0L;
-        updateHologramText(true);
+
+        hologram = GraveHologramFactory.create(topLocation, formatted, settings, HOLOGRAM_LINE_SPACING);
+        lastHologramText = String.join("\n", formatted);
+        lastHologramUpdateAt = now;
     }
 
     private void updateHologramText(boolean force) {
@@ -307,6 +300,16 @@ public class Grave {
         if (!force && now - lastHologramUpdateAt < 1_000L) return;
         lastHologramUpdateAt = now;
 
+        List<String> formatted = formatHologramLines(now);
+        String text = String.join("\n", formatted);
+        if (force || !text.equals(lastHologramText)) {
+            hologram.setLines(formatted);
+            lastHologramText = text;
+        }
+    }
+
+    @NotNull
+    private List<String> formatHologramLines(long now) {
         GraveSnapshot snapshot = contents.snapshot();
         int despawnTime = CONFIG.getInt("despawn-time-seconds", 1800);
         long remaining = despawnTime == -1 ? now - spawned : Math.max(0L, despawnTime * 1_000L - (now - spawned));
@@ -320,16 +323,7 @@ public class Grave {
                     .replace("%despawn-time%", TextFormatter.formatTime(remaining));
             formatted.add(TextFormatter.formatToString(replaced));
         }
-
-        String text = String.join("\n", formatted);
-        if (force || !text.equals(lastHologramText)) {
-            hologram.setText(text);
-            lastHologramText = text;
-        }
-    }
-
-    private static double getNewHeight(double y, int lines, float lineHeight) {
-        return y - lineHeight * (lines - 1) + 0.25;
+        return formatted;
     }
 
     public int countItems() {
@@ -447,7 +441,7 @@ public class Grave {
         return entity;
     }
 
-    public TextDisplay getHologram() {
+    public GraveHologram getHologram() {
         return hologram;
     }
 
