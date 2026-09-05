@@ -4,7 +4,6 @@ import com.slyph.clovergraves.config.GraveSettings;
 import com.slyph.clovergraves.grave.BlockKey;
 import com.slyph.clovergraves.grave.Grave;
 import com.slyph.clovergraves.grave.SpawnedGraves;
-import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -15,7 +14,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -40,7 +38,7 @@ public class PlayerInteractListener implements Listener {
         if (action != Action.RIGHT_CLICK_BLOCK && action != Action.RIGHT_CLICK_AIR) return;
 
         Grave grave = graveFromClickedBlock(event);
-        if (grave == null) grave = findTargetedGrave(event.getPlayer());
+        if (grave == null) grave = findTargetedGrave(event.getPlayer(), event.getClickedBlock());
         if (grave == null) return;
 
         deny(event);
@@ -62,22 +60,28 @@ public class PlayerInteractListener implements Listener {
     }
 
     @Nullable
-    private Grave findTargetedGrave(@NotNull Player player) {
+    private Grave findTargetedGrave(@NotNull Player player, @Nullable Block clickedBlock) {
         GraveSettings settings = GraveSettings.current();
         double maxDistance = settings.interactRadius();
         Location eye = player.getEyeLocation();
         Vector origin = eye.toVector();
         Vector direction = eye.getDirection().normalize();
 
-        RayTraceResult blockHit = player.getWorld().rayTraceBlocks(
-                eye,
-                direction,
-                maxDistance,
-                FluidCollisionMode.NEVER,
-                true
-        );
-        if (blockHit != null && blockHit.getHitPosition() != null) {
-            maxDistance = Math.min(maxDistance, origin.distance(blockHit.getHitPosition()) + BLOCK_HIT_EPSILON);
+        if (clickedBlock != null) {
+            double blockDistance = rayBoxDistance(
+                    origin,
+                    direction,
+                    clickedBlock.getX(),
+                    clickedBlock.getY(),
+                    clickedBlock.getZ(),
+                    clickedBlock.getX() + 1.0,
+                    clickedBlock.getY() + 1.0,
+                    clickedBlock.getZ() + 1.0,
+                    maxDistance
+            );
+            if (blockDistance >= 0) {
+                maxDistance = Math.min(maxDistance, blockDistance + BLOCK_HIT_EPSILON);
+            }
         }
 
         Grave best = null;
