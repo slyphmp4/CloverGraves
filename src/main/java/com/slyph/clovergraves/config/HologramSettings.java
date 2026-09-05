@@ -1,7 +1,7 @@
 package com.slyph.clovergraves.config;
 
 import com.artillexstudios.axapi.libs.boostedyaml.block.implementation.Section;
-import com.artillexstudios.axapi.utils.logging.LogUtils;
+import com.slyph.clovergraves.utils.CloverLogger;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.TextDisplay;
 import org.jetbrains.annotations.NotNull;
@@ -34,7 +34,7 @@ public record HologramSettings(boolean seeThrough, boolean shadow, TextDisplay.T
         try {
             return Integer.parseUnsignedInt(raw.trim(), 16);
         } catch (NumberFormatException ex) {
-            LogUtils.warn("invalid holograms.background-color '{}', expected an 8-digit AARRGGBB hex value, using default", raw);
+            CloverLogger.warn("invalid holograms.background-color '{}', expected an 8-digit AARRGGBB hex value, using default", raw);
             return DEFAULT_BACKGROUND;
         }
     }
@@ -44,7 +44,7 @@ public record HologramSettings(boolean seeThrough, boolean shadow, TextDisplay.T
         try {
             return TextDisplay.TextAlignment.valueOf(raw.trim().toUpperCase());
         } catch (IllegalArgumentException ex) {
-            LogUtils.warn("invalid holograms.alignment '{}', using default", raw);
+            CloverLogger.warn("invalid holograms.alignment '{}', using default", raw);
             return DEFAULT_ALIGNMENT;
         }
     }
@@ -54,7 +54,7 @@ public record HologramSettings(boolean seeThrough, boolean shadow, TextDisplay.T
         try {
             return Display.Billboard.valueOf(raw.trim().toUpperCase());
         } catch (IllegalArgumentException ex) {
-            LogUtils.warn("invalid holograms.billboard '{}', using default", raw);
+            CloverLogger.warn("invalid holograms.billboard '{}', using default", raw);
             return DEFAULT_BILLBOARD;
         }
     }
