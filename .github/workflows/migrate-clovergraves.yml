@@ -13,12 +13,12 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: rewrite
           fetch-depth: 0
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -161,53 +161,13 @@ jobs:
               default: op
           EOF
 
-          cat > .github/workflows/build.yml <<'EOF'
-          name: Build CloverGraves
-
-          on:
-            push:
-              branches: [rewrite]
-            pull_request:
-            workflow_dispatch:
-
-          concurrency:
-            group: ${{ github.workflow }}-${{ github.ref }}
-            cancel-in-progress: true
-
-          jobs:
-            build:
-              runs-on: ubuntu-latest
-              permissions:
-                contents: read
-              steps:
-                - uses: actions/checkout@v4
-
-                - uses: actions/setup-java@v4
-                  with:
-                    distribution: temurin
-                    java-version: '21'
-
-                - uses: gradle/actions/setup-gradle@v4
-
-                - name: Build and test
-                  run: ./gradlew clean build --no-daemon
-
-                - name: Upload CloverGraves jar
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: CloverGraves-${{ github.sha }}
-                    path: |
-                      build/libs/CloverGraves-*.jar
-                      !build/libs/*-unshaded.jar
-                    if-no-files-found: error
-          EOF
-
           rm -f pom.xml
           gradle wrapper --gradle-version 9.7.1 --distribution-type bin
-          rm -f .github/workflows/migrate-clovergraves.yml
+          rm -rf .gradle
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
+          git add -f gradle/wrapper/gradle-wrapper.jar
           git commit -m "Migrate CloverGraves to Gradle and com.slyph.clovergraves"
           git push origin HEAD:rewrite
