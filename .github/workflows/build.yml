@@ -25,8 +25,17 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Audit AxAPI runtime imports
-        run: grep -RIn "com.artillexstudios.axapi" src/main/java || true
+      - name: Audit Cardboard compatibility
+        shell: bash
+        run: |
+          echo "=== AxAPI imports ==="
+          grep -RIn "com.artillexstudios.axapi" src/main/java || true
+          echo "=== Config API usage ==="
+          grep -RhoE '(CONFIG|LANG)\.[A-Za-z0-9_]+' src/main/java | sort -u || true
+          echo "=== StringUtils API usage ==="
+          grep -RhoE 'StringUtils\.[A-Za-z0-9_]+' src/main/java | sort -u || true
+          echo "=== Scheduler API usage ==="
+          grep -RhoE 'Scheduler\.[A-Za-z0-9_]+|Scheduler\.get\(\)\.[A-Za-z0-9_]+' src/main/java | sort -u || true
 
       - name: Build and test
         run: ./gradlew clean build --no-daemon
