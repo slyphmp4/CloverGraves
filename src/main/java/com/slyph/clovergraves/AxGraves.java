@@ -108,7 +108,7 @@ public final class AxGraves extends JavaPlugin {
 
         String server = (Bukkit.getName() + " " + Bukkit.getVersion()).toLowerCase(Locale.ROOT);
         if (server.contains("cardboard") && "26.2".equals(Bukkit.getMinecraftVersion())) {
-            CloverLogger.info("Cardboard 26.2 detected; CloverGraves is using the Bukkit-only compatibility backend");
+            CloverLogger.info("Cardboard 26.2 detected; CloverGraves is using native Bukkit TextDisplay holograms");
         } else if (!"26.2".equals(Bukkit.getMinecraftVersion())) {
             CloverLogger.warn("CloverGraves targets Minecraft/Cardboard 26.2; detected Minecraft {}", Bukkit.getMinecraftVersion());
         }
