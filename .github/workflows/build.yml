@@ -1,9 +1,10 @@
-name: Build
+name: Build CloverGraves
 
 on:
   push:
-    branches: ['**']
+    branches: [rewrite]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,20 +16,23 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-          cache: maven
+
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Build and test
-        run: mvn -B -ntp verify
+        run: ./gradlew clean build --no-daemon
 
-      - name: Upload jar
+      - name: Upload CloverGraves jar
         uses: actions/upload-artifact@v4
         with:
-          name: AxGraves
-          path: target/AxGraves-*.jar
+          name: CloverGraves-${{ github.sha }}
+          path: |
+            build/libs/CloverGraves-*.jar
+            !build/libs/*-unshaded.jar
           if-no-files-found: error
