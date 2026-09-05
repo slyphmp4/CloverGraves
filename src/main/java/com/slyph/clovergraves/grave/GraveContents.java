@@ -1,8 +1,8 @@
 package com.slyph.clovergraves.grave;
 
 import com.artillexstudios.axapi.scheduler.Scheduler;
-import com.artillexstudios.axapi.serializers.Serializers;
 import com.artillexstudios.axapi.utils.logging.LogUtils;
+import com.slyph.clovergraves.storage.ItemSerialization;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.inventory.Inventory;
@@ -13,20 +13,6 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
- * The authoritative store for a grave's items and XP.
- *
- * <p>Previously the live Bukkit {@code Inventory} itself was the source of truth, and it was
- * read from an off-thread {@code ScheduledExecutorService} ten times a second (the old tick
- * loop) and once per autosave - an unsynchronized read of a main-thread object, and on Folia a
- * cross-region one. This type inverts that: {@link #items} is the source of truth, mutated only
- * on the region that owns the grave's location, and {@link #snapshot()} publishes an immutable,
- * pre-serialized {@link GraveSnapshot} that any thread may read safely.</p>
- *
- * <p>The Bukkit {@link Inventory} ("view") is materialized lazily, only while at least one
- * player has the grave open, and is written back into {@link #items} on every accepted click/
- * drag/close via {@link #syncFromView()}.</p>
- */
 public final class GraveContents {
     private final Location location;
     private final String title;
@@ -66,7 +52,6 @@ public final class GraveContents {
         return view;
     }
 
-    /** Re-reads {@link #items} from the live view after a click/drag/close was accepted. */
     public void syncFromView() {
         assertOwned();
         if (view == null) return;
@@ -74,7 +59,6 @@ public final class GraveContents {
         bumpVersion();
     }
 
-    /** Drops the Bukkit view reference once nobody is looking at it, so a looted grave holds none. */
     public void closeViewIfEmpty() {
         assertOwned();
         if (view != null && view.getViewers().isEmpty()) {
@@ -98,7 +82,6 @@ public final class GraveContents {
         return storedXP;
     }
 
-    /** Zeroes and returns the stored XP - used by the interact flow, which grants it to the opener. */
     public int takeXP() {
         assertOwned();
         int taken = storedXP;
@@ -109,8 +92,8 @@ public final class GraveContents {
 
     public int countItems() {
         int count = 0;
-        for (ItemStack it : items) {
-            if (it != null && !it.getType().isAir()) count++;
+        for (ItemStack item : items) {
+            if (item != null && !item.getType().isAir()) count++;
         }
         return count;
     }
@@ -119,11 +102,6 @@ public final class GraveContents {
         return countItems() == 0 && storedXP == 0;
     }
 
-    /**
-     * Empties {@link #items}/{@link #storedXP} first and only then hands back what was drained,
-     * so a concurrently in-flight async save can never persist items that are simultaneously
-     * about to land on the ground.
-     */
     @NotNull
     public ItemStack[] drainItems() {
         assertOwned();
@@ -138,20 +116,13 @@ public final class GraveContents {
         version.incrementAndGet();
     }
 
-    /**
-     * Serializes {@link #items} to NBT bytes on the calling (region-owning) thread and publishes
-     * an immutable {@link GraveSnapshot} for off-thread readers. Must be called from the owning
-     * region - it is invoked every tick by {@link Grave#tick()}, so off-thread readers such as
-     * the periodic storage flush always see an at-most-one-tick-old snapshot without ever having
-     * to hop onto the region thread themselves.
-     */
     public void refreshSnapshot() {
         assertOwned();
-        long v = version.get();
-        if (snapshot.version() == v) return;
-        byte[] serialized = Serializers.ITEM_ARRAY.serialize(items);
+        long currentVersion = version.get();
+        if (snapshot.version() == currentVersion) return;
+        byte[] serialized = ItemSerialization.serialize(items);
         int count = countItems();
-        snapshot = new GraveSnapshot(v, count, storedXP, serialized, count == 0 && storedXP == 0);
+        snapshot = new GraveSnapshot(currentVersion, count, storedXP, serialized, count == 0 && storedXP == 0);
     }
 
     @NotNull
