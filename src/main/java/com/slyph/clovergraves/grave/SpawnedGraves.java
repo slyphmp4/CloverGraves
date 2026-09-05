@@ -3,7 +3,6 @@ package com.slyph.clovergraves.grave;
 import com.slyph.clovergraves.storage.EndReason;
 import com.slyph.clovergraves.storage.GraveStorage;
 import com.slyph.clovergraves.utils.LimitUtils;
-import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -43,8 +42,7 @@ public class SpawnedGraves {
 
         graves.add(grave);
         byBlock.put(grave.getBlockKey(), grave);
-        registerEntity(grave.getEntity(), grave);
-        registerEntity(grave.getInteractionEntity(), grave);
+        if (grave.getEntity() != null) byEntity.put(grave.getEntity().getUniqueId(), grave);
         count.incrementAndGet();
     }
 
@@ -67,20 +65,11 @@ public class SpawnedGraves {
     public static void removeGrave(@NotNull Grave grave, @NotNull EndReason reason) {
         if (graves.remove(grave)) count.decrementAndGet();
         byBlock.remove(grave.getBlockKey(), grave);
-        unregisterEntity(grave.getEntity(), grave);
-        unregisterEntity(grave.getInteractionEntity(), grave);
+        if (grave.getEntity() != null) byEntity.remove(grave.getEntity().getUniqueId(), grave);
 
         if (grave.storageId() > 0) {
             pendingRemovals.add(new PendingRemoval(grave.storageId(), reason));
         }
-    }
-
-    private static void registerEntity(@Nullable Entity entity, @NotNull Grave grave) {
-        if (entity != null) byEntity.put(entity.getUniqueId(), grave);
-    }
-
-    private static void unregisterEntity(@Nullable Entity entity, @NotNull Grave grave) {
-        if (entity != null) byEntity.remove(entity.getUniqueId(), grave);
     }
 
     @Nullable

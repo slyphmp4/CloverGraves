@@ -27,7 +27,6 @@ import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.HumanEntity;
-import org.bukkit.entity.Interaction;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
@@ -55,7 +54,6 @@ public class Grave {
     private static final long TICK_PERIOD = 2L;
     private static final float HOLOGRAM_LINE_SPACING = 0.3f;
     private static final long INTERACTION_DEBOUNCE_NANOS = 100_000_000L;
-    private static final double INTERACTION_Y_OFFSET = -0.25;
 
     private final long spawned;
     private final Location location;
@@ -66,7 +64,6 @@ public class Grave {
     private final GraveContents contents;
     private final GraveInventoryHolder holder;
     private final ArmorStand entity;
-    private final Interaction interactionEntity;
     private final CloverTask tickTask;
     private final AtomicBoolean removed = new AtomicBoolean(false);
     private final Map<UUID, Long> lastProtectionNotice = new ConcurrentHashMap<>();
@@ -134,15 +131,6 @@ public class Grave {
                 ? location.getYaw()
                 : LocationUtils.getNearestDirection(location.getYaw());
         entity.setRotation(yaw, 0f);
-
-        GraveSettings settings = GraveSettings.current();
-        Location interactionLocation = location.clone().add(0, INTERACTION_Y_OFFSET, 0);
-        interactionEntity = (Interaction) location.getWorld().spawnEntity(interactionLocation, EntityType.INTERACTION);
-        interactionEntity.setPersistent(false);
-        interactionEntity.setInvulnerable(true);
-        interactionEntity.setInteractionWidth(settings.interactionHitboxWidth());
-        interactionEntity.setInteractionHeight(settings.interactionHitboxHeight());
-        interactionEntity.setResponsive(true);
 
         contents.refreshSnapshot();
         updateHologram();
@@ -403,7 +391,6 @@ public class Grave {
             SpawnedGraves.removeGrave(this, reason);
             removeInventory();
             if (entity != null) entity.remove();
-            if (interactionEntity != null) interactionEntity.remove();
             if (hologram != null) hologram.remove();
         };
 
@@ -501,10 +488,6 @@ public class Grave {
 
     public ArmorStand getEntity() {
         return entity;
-    }
-
-    public Interaction getInteractionEntity() {
-        return interactionEntity;
     }
 
     public GraveHologram getHologram() {
