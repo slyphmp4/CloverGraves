@@ -7,16 +7,15 @@ group = "com.slyph"
 version = "1.29.0"
 
 repositories {
+    maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.artillex-studios.com/releases/")
-    maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
-    maven("https://oss.sonatype.org/content/groups/public/")
     maven("https://jitpack.io")
     mavenCentral()
 }
 
 dependencies {
-    compileOnly("org.spigotmc:spigot-api:1.20.2-R0.1-SNAPSHOT")
-    implementation("com.artillexstudios.axapi:axapi:2.1.0-DEV-32:all")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.110-stable")
+    implementation("com.artillexstudios.axapi:axapi:2.1.8:all")
     compileOnly("org.slf4j:slf4j-api:2.0.17")
     compileOnly("com.github.MilkBowl:VaultAPI:1.7") {
         isTransitive = false
@@ -26,7 +25,7 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testImplementation("org.spigotmc:spigot-api:1.20.2-R0.1-SNAPSHOT")
+    testImplementation("io.papermc.paper:paper-api:26.2.build.110-stable")
     testImplementation("org.slf4j:slf4j-api:2.0.17")
     testImplementation("com.github.MilkBowl:VaultAPI:1.7") {
         isTransitive = false
@@ -36,11 +35,12 @@ dependencies {
 }
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(25))
 }
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
+    options.release.set(25)
     options.compilerArgs.add("-parameters")
 }
 
