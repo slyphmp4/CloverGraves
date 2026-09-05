@@ -25,6 +25,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      - name: Audit AxAPI runtime imports
+        run: grep -RIn "com.artillexstudios.axapi" src/main/java || true
+
       - name: Build and test
         run: ./gradlew clean build --no-daemon
 
