@@ -11,6 +11,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.jetbrains.annotations.NotNull;
 
 public class PlayerInteractListener implements Listener {
@@ -32,9 +33,9 @@ public class PlayerInteractListener implements Listener {
         event.setUseItemInHand(Event.Result.DENY);
         event.setCancelled(true);
         if (alreadyCancelled) return;
+        if (action != Action.RIGHT_CLICK_BLOCK) return;
+        if (event.getHand() != EquipmentSlot.HAND) return;
 
-        if (action == Action.LEFT_CLICK_BLOCK) {
-            grave.leftClick(event.getPlayer());
-        }
+        grave.interact(event.getPlayer(), EquipmentSlot.HAND);
     }
 }

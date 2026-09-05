@@ -2,11 +2,10 @@ package com.slyph.clovergraves.config;
 
 import org.jetbrains.annotations.NotNull;
 
-public record GraveSettings(int despawnTimeSeconds, boolean despawnWhenEmpty, boolean autoRotationEnabled,
-                             float autoRotationSpeed, boolean dropItems, boolean droppedItemVelocity,
-                             double interactRadius, boolean interactOnlyOwn, boolean enableInstantPickup,
-                             boolean instantPickupOnlyOwn, boolean autoEquipArmor, int protectionSeconds,
-                             int protectionMessageCooldownSeconds) {
+public record GraveSettings(int despawnTimeSeconds, boolean autoRotationEnabled, float autoRotationSpeed,
+                             boolean dropItems, boolean droppedItemVelocity, double interactRadius,
+                             boolean interactOnlyOwn, boolean enableInstantPickup, boolean instantPickupOnlyOwn,
+                             boolean autoEquipArmor, int protectionSeconds, int protectionMessageCooldownSeconds) {
     private static volatile GraveSettings current = defaults();
 
     public double interactRadiusSquared() {
@@ -21,7 +20,6 @@ public record GraveSettings(int despawnTimeSeconds, boolean despawnWhenEmpty, bo
     public static void reload(@NotNull CloverConfig config) {
         current = new GraveSettings(
                 config.getInt("despawn-time-seconds", 1800),
-                config.getBoolean("despawn-when-empty", true),
                 config.getBoolean("auto-rotation.enabled", false),
                 config.getFloat("auto-rotation.speed", 10f),
                 config.getBoolean("drop-items", true),
@@ -38,6 +36,6 @@ public record GraveSettings(int despawnTimeSeconds, boolean despawnWhenEmpty, bo
 
     @NotNull
     private static GraveSettings defaults() {
-        return new GraveSettings(1800, true, false, 10f, true, true, 7.0, false, true, false, true, 30, 3);
+        return new GraveSettings(1800, false, 10f, true, true, 7.0, false, true, false, true, 30, 3);
     }
 }

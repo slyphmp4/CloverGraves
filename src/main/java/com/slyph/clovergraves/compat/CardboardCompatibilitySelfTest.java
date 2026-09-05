@@ -20,6 +20,7 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 public final class CardboardCompatibilitySelfTest {
     private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
@@ -60,7 +61,7 @@ public final class CardboardCompatibilitySelfTest {
             HologramSettings settings = HologramSettings.parse(null);
             hologram = new TextDisplayGraveHologram(
                     location.clone().add(0, 2, 0),
-                    List.of(Component.text("CloverGraves"), Component.text("Cardboard 26.2")),
+                    List.of(Component.text("CloverGraves"), Component.text("00:29:01")),
                     settings,
                     0.3f
             );
@@ -73,16 +74,27 @@ public final class CardboardCompatibilitySelfTest {
             if (display.isShadowed() != settings.shadow()) throw new IllegalStateException("TextDisplay shadow failed");
             if (display.isDefaultBackground()) throw new IllegalStateException("TextDisplay custom background was not enabled");
             if (display.getLineWidth() != 1000) throw new IllegalStateException("TextDisplay line width failed");
+            if (display.getInterpolationDelay() != 0) throw new IllegalStateException("TextDisplay interpolation delay is not zero");
+            if (display.getInterpolationDuration() != 0) throw new IllegalStateException("TextDisplay interpolation duration is not zero");
+            if (display.getTeleportDuration() != 0) throw new IllegalStateException("TextDisplay teleport duration is not zero");
             Color background = display.getBackgroundColor();
             if (background == null || background.asARGB() != settings.backgroundColor()) {
                 throw new IllegalStateException("TextDisplay background failed");
             }
 
-            hologram.setLines(List.of(Component.text("CloverGraves"), Component.text("Cardboard 26.2 updated")));
-            if (!"CloverGraves\nCardboard 26.2 updated".equals(PLAIN.serialize(display.text()))) {
-                throw new IllegalStateException("TextDisplay Adventure text update failed");
+            String[] timerValues = {"00:29:00", "00:28:59", "00:28:58"};
+            for (String timer : timerValues) {
+                UUID previousId = hologram.display().getUniqueId();
+                hologram.setLines(List.of(Component.text("CloverGraves"), Component.text(timer)));
+                display = hologram.display();
+                if (previousId.equals(display.getUniqueId())) {
+                    throw new IllegalStateException("Cardboard TextDisplay update did not replace the display entity");
+                }
+                if (!("CloverGraves\n" + timer).equals(PLAIN.serialize(display.text()))) {
+                    throw new IllegalStateException("TextDisplay timer update failed at " + timer);
+                }
+                if (!hologram.isValid()) throw new IllegalStateException("TextDisplay hologram became invalid after timer update");
             }
-            if (!hologram.isValid()) throw new IllegalStateException("TextDisplay hologram became invalid after update");
 
             Bukkit.createInventory(null, 9, "CloverGraves Test");
             CloverLogger.info("CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_PASS");

@@ -3,6 +3,7 @@ package com.slyph.clovergraves.listeners;
 import com.slyph.clovergraves.grave.Grave;
 import com.slyph.clovergraves.grave.GraveInventoryHolder;
 import com.slyph.clovergraves.schedulers.CloverScheduler;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryAction;
@@ -34,7 +35,9 @@ public class GraveInventoryListener implements Listener {
             event.setCancelled(true);
             return;
         }
-        syncSoon(grave);
+
+        Player looter = event.getWhoClicked() instanceof Player player ? player : null;
+        syncSoon(grave, looter);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -47,7 +50,9 @@ public class GraveInventoryListener implements Listener {
             event.setCancelled(true);
             return;
         }
-        syncSoon(grave);
+
+        Player looter = event.getWhoClicked() instanceof Player player ? player : null;
+        syncSoon(grave, looter);
     }
 
     @EventHandler
@@ -55,14 +60,15 @@ public class GraveInventoryListener implements Listener {
         Grave grave = graveOf(event.getView());
         if (grave == null) return;
 
+        Player looter = event.getPlayer() instanceof Player player ? player : null;
         CloverScheduler.get().runAt(grave.getLocation(), () -> {
-            grave.contents().syncFromView();
+            grave.syncFromView(looter);
             grave.contents().closeViewIfEmpty();
         });
     }
 
-    private void syncSoon(@NotNull Grave grave) {
-        CloverScheduler.get().runLaterAt(grave.getLocation(), task -> grave.contents().syncFromView(), 1L);
+    private void syncSoon(@NotNull Grave grave, @Nullable Player looter) {
+        CloverScheduler.get().runLaterAt(grave.getLocation(), task -> grave.syncFromView(looter), 1L);
     }
 
     @Nullable

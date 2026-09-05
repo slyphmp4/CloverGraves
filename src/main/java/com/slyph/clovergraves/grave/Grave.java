@@ -34,6 +34,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -140,9 +141,8 @@ public class Grave {
         GraveSnapshot snapshot = contents.snapshot();
         boolean outOfTime = settings.despawnTimeSeconds() != -1
                 && settings.despawnTimeSeconds() * 1_000L <= System.currentTimeMillis() - spawned;
-        boolean emptyDespawn = settings.despawnWhenEmpty() && snapshot.empty();
 
-        if (outOfTime || emptyDespawn) {
+        if (outOfTime || snapshot.empty()) {
             remove(outOfTime ? EndReason.EXPIRED : EndReason.LOOTED);
             return;
         }
@@ -169,14 +169,12 @@ public class Grave {
 
     public void interact(@NotNull Player opener, EquipmentSlot slot) {
         if (slot != EquipmentSlot.HAND) return;
-        performInteraction(opener, false);
-    }
-
-    public void leftClick(@NotNull Player opener) {
         performInteraction(opener, opener.isSneaking());
     }
 
     private void performInteraction(@NotNull Player opener, boolean instantPickupRequested) {
+        if (removed.get()) return;
+
         GraveSettings settings = GraveSettings.current();
         if (!opener.getWorld().equals(location.getWorld())) return;
         if (opener.getLocation().distanceSquared(location) > settings.interactRadiusSquared()) return;
@@ -210,7 +208,6 @@ public class Grave {
         Bukkit.getPluginManager().callEvent(openEvent);
         if (openEvent.isCancelled()) return;
 
-        transferXP(opener);
         opener.openInventory(contents.openFor(holder, rows));
     }
 
@@ -279,10 +276,31 @@ public class Grave {
             snapshot[i] = leftover.isEmpty() ? null : leftover.values().iterator().next();
         }
 
-        if (changed) {
-            contents.setItems(snapshot);
-            tick();
+        if (changed) contents.setItems(snapshot);
+        contents.refreshSnapshot();
+
+        if (contents.snapshot().empty()) {
+            remove(EndReason.LOOTED);
+            return;
         }
+        updateHologramText(true);
+    }
+
+    public void syncFromView(@Nullable Player looter) {
+        if (removed.get()) return;
+
+        int before = contents.countItems();
+        contents.syncFromView();
+        int after = contents.countItems();
+
+        if (looter != null && before > 0 && after == 0) transferXP(looter);
+        contents.refreshSnapshot();
+
+        if (contents.snapshot().empty()) {
+            remove(EndReason.LOOTED);
+            return;
+        }
+        updateHologramText(true);
     }
 
     private boolean isSlotEmpty(ItemStack item) {
@@ -318,7 +336,14 @@ public class Grave {
     private List<Component> formatHologramLines(long now) {
         GraveSnapshot snapshot = contents.snapshot();
         int despawnTime = CONFIG.getInt("despawn-time-seconds", 1800);
-        long remaining = despawnTime == -1 ? now - spawned : Math.max(0L, despawnTime * 1_000L - (now - spawned));
+        long remaining;
+        if (despawnTime == -1) {
+            remaining = Math.max(0L, now - spawned);
+        } else {
+            long expiresAt = spawned + despawnTime * 1_000L;
+            remaining = Math.max(0L, expiresAt - now);
+            if (remaining > 0L) remaining = ((remaining + 999L) / 1_000L) * 1_000L;
+        }
 
         List<Component> formatted = new ArrayList<>();
         for (String line : LANG.getStringList("hologram")) {

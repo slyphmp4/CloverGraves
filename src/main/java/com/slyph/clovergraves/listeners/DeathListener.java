@@ -18,9 +18,12 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.EventExecutor;
 import org.jetbrains.annotations.NotNull;
@@ -29,11 +32,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static com.slyph.clovergraves.AxGraves.CONFIG;
 import static com.slyph.clovergraves.AxGraves.MESSAGEUTILS;
 
 public class DeathListener implements Listener {
+    private static final Set<UUID> PENDING_EXPERIENCE_RESET = ConcurrentHashMap.newKeySet();
+
     private static List<String> disabledWorlds;
     private static List<String> blacklistedDeathCauses;
     private static boolean overrideKeepInventory;
@@ -66,9 +74,11 @@ public class DeathListener implements Listener {
         EventExecutor executor = (listener, event) -> {
             if (event instanceof PlayerDeathEvent deathEvent) onDeath(deathEvent);
         };
-        AxGraves.getInstance().getServer().getPluginManager().registerEvent(
-                PlayerDeathEvent.class, this, priority, executor, AxGraves.getInstance(), true
+        AxGraves plugin = AxGraves.getInstance();
+        plugin.getServer().getPluginManager().registerEvent(
+                PlayerDeathEvent.class, this, priority, executor, plugin, true
         );
+        plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
     public void onDeath(PlayerDeathEvent event) {
@@ -128,12 +138,10 @@ public class DeathListener implements Listener {
 
         if (drops.isEmpty() && xp == 0) return;
 
+        Grave grave;
         try {
-            Grave grave = new Grave(location, player, drops, xp, System.currentTimeMillis(), orderSnapshot);
+            grave = new Grave(location, player, drops, xp, System.currentTimeMillis(), orderSnapshot);
             SpawnedGraves.addGrave(grave);
-            SaveGraves.saveNow(grave);
-            Bukkit.getPluginManager().callEvent(new GraveSpawnEvent(player, grave));
-            if (debug) CloverLogger.info("[{}] grave created", player.getName());
         } catch (Exception ex) {
             CloverLogger.error("failed to create a grave for {}; restoring captured items and xp", player.getName(), ex);
             restoreOnFailure(player, drops);
@@ -148,7 +156,55 @@ public class DeathListener implements Listener {
                         originalNewTotalExp
                 );
             }
+            return;
         }
+
+        if (xpCaptured) captureExperience(player);
+
+        try {
+            SaveGraves.saveNow(grave);
+        } catch (Exception ex) {
+            CloverLogger.error("failed to save a newly created grave for {}; it remains active and will be retried", player.getName(), ex);
+        }
+
+        try {
+            Bukkit.getPluginManager().callEvent(new GraveSpawnEvent(player, grave));
+        } catch (Exception ex) {
+            CloverLogger.error("a GraveSpawnEvent listener failed for {}", player.getName(), ex);
+        }
+
+        if (debug) CloverLogger.info("[{}] grave created", player.getName());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onRespawn(@NotNull PlayerRespawnEvent event) {
+        resetExperienceNextTick(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onJoin(@NotNull PlayerJoinEvent event) {
+        resetExperienceNextTick(event.getPlayer().getUniqueId());
+    }
+
+    private static void captureExperience(@NotNull Player player) {
+        PENDING_EXPERIENCE_RESET.add(player.getUniqueId());
+        resetExperience(player);
+    }
+
+    private static void resetExperienceNextTick(@NotNull UUID playerId) {
+        if (!PENDING_EXPERIENCE_RESET.contains(playerId)) return;
+        Bukkit.getScheduler().runTask(AxGraves.getInstance(), () -> {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null) return;
+            if (!PENDING_EXPERIENCE_RESET.remove(playerId)) return;
+            resetExperience(player);
+        });
+    }
+
+    private static void resetExperience(@NotNull Player player) {
+        player.setTotalExperience(0);
+        player.setLevel(0);
+        player.setExp(0f);
     }
 
     private static void restoreOnFailure(Player player, List<ItemStack> drops) {
