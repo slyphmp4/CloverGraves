@@ -6,6 +6,7 @@ import com.slyph.clovergraves.grave.hologram.TextDisplayGraveHologram;
 import com.slyph.clovergraves.storage.ItemSerialization;
 import com.slyph.clovergraves.utils.CloverLogger;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Location;
@@ -21,6 +22,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class CardboardCompatibilitySelfTest {
+    private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
+
     private CardboardCompatibilitySelfTest() {
     }
 
@@ -50,7 +53,7 @@ public final class CardboardCompatibilitySelfTest {
             spawned.add(entityTypeDisplay);
             entityTypeDisplay.setPersistent(false);
             entityTypeDisplay.text(Component.text("EntityType route"));
-            if (!Component.text("EntityType route").equals(entityTypeDisplay.text())) {
+            if (!"EntityType route".equals(PLAIN.serialize(entityTypeDisplay.text()))) {
                 throw new IllegalStateException("EntityType.TEXT_DISPLAY route failed");
             }
 
@@ -69,14 +72,16 @@ public final class CardboardCompatibilitySelfTest {
             if (display.isSeeThrough() != settings.seeThrough()) throw new IllegalStateException("TextDisplay see-through failed");
             if (display.isShadowed() != settings.shadow()) throw new IllegalStateException("TextDisplay shadow failed");
             if (display.isDefaultBackground()) throw new IllegalStateException("TextDisplay custom background was not enabled");
+            if (display.getLineWidth() != 1000) throw new IllegalStateException("TextDisplay line width failed");
             Color background = display.getBackgroundColor();
             if (background == null || background.asARGB() != settings.backgroundColor()) {
                 throw new IllegalStateException("TextDisplay background failed");
             }
 
-            Component updated = Component.text("CloverGraves").append(Component.newline()).append(Component.text("Cardboard 26.2 updated"));
             hologram.setLines(List.of(Component.text("CloverGraves"), Component.text("Cardboard 26.2 updated")));
-            if (!updated.equals(display.text())) throw new IllegalStateException("TextDisplay Adventure text update failed");
+            if (!"CloverGraves\nCardboard 26.2 updated".equals(PLAIN.serialize(display.text()))) {
+                throw new IllegalStateException("TextDisplay Adventure text update failed");
+            }
             if (!hologram.isValid()) throw new IllegalStateException("TextDisplay hologram became invalid after update");
 
             Bukkit.createInventory(null, 9, "CloverGraves Test");
