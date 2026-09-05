@@ -1,20 +1,12 @@
 package com.slyph.clovergraves.config;
 
-import com.artillexstudios.axapi.packetentity.meta.entity.DisplayMeta;
-import com.artillexstudios.axapi.packetentity.meta.entity.TextDisplayMeta;
+import org.bukkit.entity.Display;
+import org.bukkit.entity.TextDisplay;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/**
- * Directly reproduces (and verifies the fix for) the crash the plugin shipped with:
- * {@code Integer.parseInt("FF000000", 16)} throws {@code NumberFormatException} for any opaque
- * AARRGGBB color, because it parses as a signed int and 0xFF000000 exceeds Integer.MAX_VALUE.
- * Since hologram construction happened inline in the death path with no surrounding try/catch,
- * this turned "set a fully opaque hologram background" into "every death wipes the player's
- * inventory".
- */
 class HologramSettingsTest {
 
     @Test
@@ -42,24 +34,24 @@ class HologramSettingsTest {
 
     @Test
     void validAlignmentIsCaseInsensitive() {
-        assertEquals(TextDisplayMeta.Alignment.LEFT, HologramSettings.parseAlignment("left"));
-        assertEquals(TextDisplayMeta.Alignment.CENTER, HologramSettings.parseAlignment("CENTER"));
+        assertEquals(TextDisplay.TextAlignment.LEFT, HologramSettings.parseAlignment("left"));
+        assertEquals(TextDisplay.TextAlignment.CENTER, HologramSettings.parseAlignment("CENTER"));
     }
 
     @Test
     void invalidAlignmentFallsBackToDefaultInsteadOfThrowing() {
         assertDoesNotThrow(() -> HologramSettings.parseAlignment("sideways"));
-        assertEquals(TextDisplayMeta.Alignment.CENTER, HologramSettings.parseAlignment("sideways"));
+        assertEquals(TextDisplay.TextAlignment.CENTER, HologramSettings.parseAlignment("sideways"));
     }
 
     @Test
     void validBillboardIsCaseInsensitive() {
-        assertEquals(DisplayMeta.BillboardConstrain.VERTICAL, HologramSettings.parseBillboard("vertical"));
+        assertEquals(Display.Billboard.VERTICAL, HologramSettings.parseBillboard("vertical"));
     }
 
     @Test
     void invalidBillboardFallsBackToDefaultInsteadOfThrowing() {
         assertDoesNotThrow(() -> HologramSettings.parseBillboard("nonsense"));
-        assertEquals(DisplayMeta.BillboardConstrain.VERTICAL, HologramSettings.parseBillboard("nonsense"));
+        assertEquals(Display.Billboard.VERTICAL, HologramSettings.parseBillboard("nonsense"));
     }
 }
