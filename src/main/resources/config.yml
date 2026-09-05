@@ -1,4 +1,4 @@
-prefix: "<gradient:#FF00FF:#DD00FF><b>CloverGraves</b></gradient> &7» "
+prefix: ""
 
 despawn-time-seconds: 1800
 drop-items: true
@@ -93,10 +93,19 @@ spawn-height-limits:
     min: 0
     max: 319
 
+command-aliases:
+  - "clovergraves"
+  - "clovergrave"
+  - "graves"
+  - "grave"
+  - "axgraves"
+  - "axgrave"
+  - "bibingka"
+
 world-name:
-  world: "Overworld"
-  world_nether: "The Nether"
-  world_the_end: "The End"
+  world: "Обычный мир"
+  world_nether: "Незер"
+  world_the_end: "Энд"
 
 disabled-worlds:
   - "blacklisted_world"
@@ -123,4 +132,5 @@ update-notifier:
   on-join: true
 
 debug: false
+
 version: 23
