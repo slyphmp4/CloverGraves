@@ -1,175 +1,189 @@
 hologram:
-  - "&FF0000☠ &FF0000&l%player% &FF0000☠"
-  - "&00CC00⌛ &00FF00%despawn-time% &00CC00⌛"
-  - "&00AAFF%item% &fɪᴛᴇᴍ &8| &00AAFF%xp% &fxᴘ"
+  - '&C72B2B☠  &FF5A5A&l%player%'
+  - '&E9C66E⌛  &FFF0B8%despawn-time%'
+  - '&6EE9E5%item% предметов &8• &86E96E%xp% XP'
 
 help:
-  - "&7"
-  - "<gradient:#FF00FF:#DD00FF><b>CloverGraves</b></gradient> <#FF55FF>Help"
-  - " <#FF55FF>➤ <white>/clovergraves reload <#DDDDDD>| <#FFAAFF>Reload plugin"
-  - " <#FF55FF>➤ <white>/clovergraves list <#DDDDDD>| <#FFAAFF>List spawned graves"
-  - " <#FF55FF>➤ <white>/clovergraves tp <#DDDDDD>| <#FFAAFF>Teleport to last grave"
-  - " <#FF55FF>➤ <white>/clovergraves history <player> <#DDDDDD>| <#FFAAFF>View a player's grave history"
-  - " <#FF55FF>➤ <white>/clovergraves restore <player> <id> <#DDDDDD>| <#FFAAFF>Restore a past grave"
-  - "&7"
+  - '&7'
+  - '&FFD166CloverGraves &8• &FFFFFFКоманды'
+  - '&7'
+  - '&787878▪ &FFFFFF/clovergraves list &8— &BFBFBFпоказать могилы'
+  - '&787878▪ &FFFFFF/clovergraves tp &8— &BFBFBFтелепортироваться к своей могиле'
+  - '&787878▪ &FFFFFF/clovergraves history <игрок> &8— &BFBFBFистория могил игрока'
+  - '&787878▪ &FFFFFF/clovergraves restore <игрок> <id> &8— &BFBFBFвосстановить могилу'
+  - '&787878▪ &FFFFFF/clovergraves reload &8— &BFBFBFперезагрузить плагин'
+  - '&7'
 
-gui-name: "&0%player%'s Grave"
-unknown-player: "Unknown"
+gui-name: '&0Могила • %player%'
+unknown-player: 'Неизвестный игрок'
 
 reload:
   success:
-    - "&7"
-    - "&33FF33Plugin successfully reloaded!"
-    - "&7"
+    - '&7'
+    - '&86E96E✔  &6DBF58|  &86E96E&lCloverGraves &86E96Eуспешно перезагружен!'
+    - '&7'
   failed:
-    - "&7"
-    - "&FF3333Failed to reload the plugin! Check the &f%file%&FF3333 file."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AНе удалось перезагрузить CloverGraves'
+    - '&FF5A5A       Проверьте файл &FFB8B8%file%'
+    - '&7'
 
 interact:
   not-your-grave:
-    - "&7"
-    - "&FFAAFFYou can only open your own grave!"
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AВы можете открыть только свою могилу'
+    - '&7'
   protected:
-    - "&7"
-    - "&FFAAFFThis grave is still protected for &f%time%&FFAAFF!"
-    - "&7"
+    - '&7'
+    - '&E9C66E⏳  &C2A65E|  &E9C66EЭта могила защищена ещё &FFF0B8&l%time%'
+    - '&7'
 
 death-message:
   enabled: false
   message:
-    - "&7"
-    - "&FFAAAAYou have died at &f%world% %x%, %y%, %z%&FFAAAA!"
-    - "&7"
+    - '&7'
+    - '&6EE9E5☠  &58B1BF|  &6EE9E5Вы погибли в &FFFFFF%world% &6EE9E5на координатах &FFFFFF%x%, %y%, %z%'
+    - '&7'
 
 grave-relocated:
-  - "&7"
-  - "&FFAAAAYour grave was moved to &f%world% %x%, %y%, %z%&FFAAAA."
-  - "&7"
+  - '&7'
+  - '&E9C66E⚠  &C2A65E|  &E9C66EМогила была перемещена в безопасное место'
+  - '&E9C66E       &FFFFFF%world% &8• &FFF0B8%x%, %y%, %z%'
+  - '&7'
 
 grave-relocated-far:
-  - "&7"
-  - "&FFAAAANo safe ground was found nearby. Your grave was moved near spawn: &f%world% %x%, %y%, %z%&FFAAAA."
-  - "&7"
+  - '&7'
+  - '&E9C66E⚠  &C2A65E|  &E9C66EРядом с местом смерти не найдено безопасной поверхности'
+  - '&E9C66E       Могила перенесена ближе к спавну: &FFFFFF%world% &8• &FFF0B8%x%, %y%, %z%'
+  - '&7'
 
 teleport:
   cooldown:
-    - "&7"
-    - "&FFAAFFYou must wait &f%time%&FFAAFF before teleporting again."
-    - "&7"
+    - '&7'
+    - '&E9C66E⏳  &C2A65E|  &E9C66EПодождите ещё &FFF0B8&l%time% &E9C66Eперед телепортацией'
+    - '&7'
   already-pending:
-    - "&7"
-    - "&FFAAFFYou already have a teleport in progress."
-    - "&7"
+    - '&7'
+    - '&E9C66E⏳  &C2A65E|  &E9C66EТелепортация уже запущена'
+    - '&7'
   warmup-start:
-    - "&7"
-    - "&FFAAFFTeleporting in &f%seconds%s&FFAAFF. Don't move."
-    - "&7"
+    - '&7'
+    - '&6EE9E5🔔  &58B1BF|  &6EE9E5Телепортация к могиле через &FFFFFF&l%seconds% сек.'
+    - '&6EE9E5       Не двигайтесь'
+    - '&7'
   countdown:
-    - "&FFAAFF%seconds%..."
+    - '&E9C66E⏳  &C2A65E|  &FFF0B8&l%seconds%...'
   warmup-complete:
-    - "&33FF33Teleporting now!"
+    - '&7'
+    - '&86E96E✔  &6DBF58|  &86E96EТелепортация к могиле'
+    - '&7'
   cancelled:
-    - "&7"
-    - "&FF3333Teleport cancelled."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AТелепортация отменена'
+    - '&7'
   cost-confirm:
-    - "&7"
-    - "&FFAAFFTeleport costs &f%cost%&FFAAFF. Run the command again within &f%seconds%s&FFAAFF to confirm."
-    - "&7"
+    - '&7'
+    - '&E9C66E⓪  &C2A65E|  &E9C66EТелепортация стоит &FFF0B8&l%cost%'
+    - '&E9C66E       Повторите команду в течение &FFF0B8%seconds% сек. &E9C66Eдля подтверждения'
+    - '&7'
   cost-insufficient:
-    - "&7"
-    - "&FF3333You need &f%cost%&FF3333, but you only have &f%balance%&FF3333."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AНедостаточно средств для телепортации'
+    - '&FF5A5A       Нужно: &FFB8B8%cost% &8• &FF5A5AБаланс: &FFB8B8%balance%'
+    - '&7'
   cost-charged:
-    - "&7"
-    - "&FFAAFFCharged &f%cost%&FFAAFF for the teleport."
-    - "&7"
+    - '&7'
+    - '&86E96E✔  &6DBF58|  &86E96EСписано &FFFFFF%cost% &86E96Eза телепортацию'
+    - '&7'
 
 history:
   header:
-    - "&7"
-    - "&FF00FF&l=== GRAVE HISTORY: %player% ==="
+    - '&7'
+    - '&FFD166CloverGraves &8• &FFFFFFИстория могил игрока &FFD166%player%'
+    - '&7'
   entry:
-    - "&FF00FF[#%id%] &FFAAFF%world% %x%, %y%, %z% &7- %items% items, %xp% xp &7(%reason%, %time% ago)"
+    - '&787878▪ &FFFFFF#%id% &8• &BFBFBF%world% %x%, %y%, %z% &8• &6EE9E5%items% предм. &8• &86E96E%xp% XP &8• &E9C66E%reason% &8• &BFBFBF%time% назад'
   entry-restored:
-    - "&FF00FF[#%id%] &FFAAFF%world% %x%, %y%, %z% &7- %items% items, %xp% xp &7(%reason%, %time% ago, already restored)"
+    - '&787878▪ &FFFFFF#%id% &8• &BFBFBF%world% %x%, %y%, %z% &8• &6EE9E5%items% предм. &8• &86E96E%xp% XP &8• &E9C66E%reason% &8• &BFBFBF%time% назад &8• &86E96Eвосстановлена'
   empty:
-    - "&7"
-    - "&FFAAFFNo grave history found for &f%player%&FFAAFF."
-    - "&7"
+    - '&7'
+    - '&E9C66E⚠  &C2A65E|  &E9C66EИстория могил игрока &FFF0B8&l%player% &E9C66Eпуста'
+    - '&7'
 
 restore:
   success:
-    - "&7"
-    - "&33FF33Restored grave &f#%id%&33FF33 belonging to &f%player%&33FF33 at &f%world% %x%, %y%, %z%&33FF33."
-    - "&7"
+    - '&7'
+    - '&86E96E✔  &6DBF58|  &86E96EМогила &FFFFFF#%id% &86E96Eигрока &FFFFFF%player% &86E96Eвосстановлена'
+    - '&86E96E       &FFFFFF%world% &8• &D8F5D8%x%, %y%, %z%'
+    - '&7'
   not-found:
-    - "&7"
-    - "&FF3333No grave &f#%id%&FF3333 found for &f%player%&FF3333."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AМогила &FFB8B8#%id% &FF5A5Aигрока &FFB8B8%player% &FF5A5Aне найдена'
+    - '&7'
   already-restored:
-    - "&7"
-    - "&FF3333Grave &f#%id%&FF3333 has already been restored."
-    - "&7"
+    - '&7'
+    - '&E9C66E⚠  &C2A65E|  &E9C66EМогила &FFF0B8#%id% &E9C66Eуже была восстановлена'
+    - '&7'
   failed:
-    - "&7"
-    - "&FF3333Failed to restore grave &f#%id%&FF3333. See console for details."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AНе удалось восстановить могилу &FFB8B8#%id%'
+    - '&FF5A5A       Подробности записаны в консоль'
+    - '&7'
   unsupported:
-    - "&7"
-    - "&FF3333Grave history and restore require H2, SQLite or MySQL storage."
-    - "&7"
+    - '&7'
+    - '&E9C66E⚠  &C2A65E|  &E9C66EИстория и восстановление требуют хранилище H2, SQLite или MySQL'
+    - '&7'
 
 grave-list:
   header:
-    - "&7"
-    - "&FF00FF&l=== GRAVES ==="
+    - '&7'
+    - '&FFD166CloverGraves &8• &FFFFFFАктивные могилы'
+    - '&7'
   grave:
-    - "&FF00FF[TP] &FFAAFF%player% &7- &FFAAFF%world% %x%, %y%, %z% &7(%time%)"
+    - '&6EE9E5➤  &58B1BF|  &FFFFFF%player% &8• &BFBFBF%world% %x%, %y%, %z% &8• &E9C66E%time%'
   no-graves:
-    - "&7"
-    - "&FFAAFFNo graves found!"
-    - "&7"
+    - '&7'
+    - '&E9C66E⚠  &C2A65E|  &E9C66EАктивных могил не найдено'
+    - '&7'
 
 commands:
   invalid-value:
-    - "&7"
-    - "&FF0000Invalid parameter: &BB0000%value%"
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AНеверное значение: &FFB8B8%value%'
+    - '&7'
   invalid-command:
-    - "&7"
-    - "&FF0000Invalid command or subcommand."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AНеизвестная команда или подкоманда'
+    - '&7'
   missing-argument:
-    - "&7"
-    - "&FF0000Missing argument: &BB0000%value%&FF0000."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AНе указан обязательный аргумент: &FFB8B8%value%'
+    - '&7'
   no-permission:
-    - "&7"
-    - "&FF0000You don't have permission to use this command."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AУ вас нет права на эту команду'
+    - '&7'
   out-of-range:
-    - "&7"
-    - "&FF0000The &BB0000%number% &FF0000must be between &BB0000%min% &FF0000and &BB0000%max%&FF0000."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AЗначение &FFB8B8%number% &FF5A5Aдолжно быть от &FFB8B8%min% &FF5A5Aдо &FFB8B8%max%'
+    - '&7'
   player-only:
-    - "&7"
-    - "&FF0000You must be a player to use this command."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AЭта команда доступна только игрокам'
+    - '&7'
   invalid-player:
-    - "&7"
-    - "&FF0000The player &BB0000%player% &FF0000could not be found."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AИгрок &FFB8B8%player% &FF5A5Aне найден'
+    - '&7'
   invalid-selector:
-    - "&7"
-    - "&FF0000Selectors are not supported by this command."
-    - "&7"
+    - '&7'
+    - '&C72B2B❌  &FF9089|  &FF5A5AСелекторы нельзя использовать в этой команде'
+    - '&7'
 
 update-notifier:
-  - "&7"
-  - "&FF88FFThere is a new CloverGraves version available. &DDDDDD(&FFFFFFcurrent: &FF0000%current% &DDDDDD| &FFFFFFlatest: &00FF00%latest%&DDDDDD)"
-  - "&7"
+  - '&7'
+  - '&6EE9E5🔔  &58B1BF|  &6EE9E5Доступна новая версия &FFFFFFCloverGraves'
+  - '&6EE9E5       Текущая: &FFFFFF%current% &8• &6EE9E5Новая: &86E96E%latest%'
+  - '&7'
 
-version: 10
+version: 11
