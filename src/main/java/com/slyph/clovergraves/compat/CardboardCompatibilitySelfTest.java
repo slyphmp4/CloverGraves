@@ -52,6 +52,9 @@ public final class CardboardCompatibilitySelfTest {
             );
             if (!hologram.isValid()) throw new IllegalStateException("hologram backend failed to spawn");
 
+            hologram.setLines(List.of("CloverGraves", "Cardboard 26.2 updated"));
+            if (!hologram.isValid()) throw new IllegalStateException("hologram backend failed to update");
+
             Bukkit.createInventory(null, 9, "CloverGraves Test");
             CloverLogger.info("CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_PASS");
         } catch (Throwable throwable) {

@@ -168,6 +168,15 @@ public class Grave {
     }
 
     public void interact(@NotNull Player opener, EquipmentSlot slot) {
+        if (slot != EquipmentSlot.HAND) return;
+        performInteraction(opener, false);
+    }
+
+    public void leftClick(@NotNull Player opener) {
+        performInteraction(opener, opener.isSneaking());
+    }
+
+    private void performInteraction(@NotNull Player opener, boolean instantPickupRequested) {
         GraveSettings settings = GraveSettings.current();
         if (!opener.getWorld().equals(location.getWorld())) return;
         if (opener.getLocation().distanceSquared(location) > settings.interactRadiusSquared()) return;
@@ -189,7 +198,7 @@ public class Grave {
         Bukkit.getPluginManager().callEvent(interactEvent);
         if (interactEvent.isCancelled()) return;
 
-        if (slot == EquipmentSlot.HAND && opener.isSneaking()) {
+        if (instantPickupRequested) {
             if (opener.getGameMode() == GameMode.SPECTATOR) return;
             if (!settings.enableInstantPickup()) return;
             if (settings.instantPickupOnlyOwn() && !isOwner) return;
@@ -295,7 +304,15 @@ public class Grave {
     }
 
     private void updateHologramText(boolean force) {
-        if (hologram == null || !hologram.isValid()) return;
+        if (hologram == null) {
+            updateHologram();
+            return;
+        }
+        if (!hologram.isValid()) {
+            updateHologram();
+            return;
+        }
+
         long now = System.currentTimeMillis();
         if (!force && now - lastHologramUpdateAt < 1_000L) return;
         lastHologramUpdateAt = now;

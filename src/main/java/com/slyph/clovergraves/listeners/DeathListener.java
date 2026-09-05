@@ -103,17 +103,26 @@ public class DeathListener implements Listener {
             if (store) event.getDrops().clear();
         }
 
+        int originalDroppedExp = event.getDroppedExp();
+        boolean originalShouldDropExperience = event.shouldDropExperience();
+        boolean originalKeepLevel = event.getKeepLevel();
+        int originalNewExp = event.getNewExp();
+        int originalNewLevel = event.getNewLevel();
+        int originalNewTotalExp = event.getNewTotalExp();
+
         int xp = 0;
+        boolean xpCaptured = false;
         if (storeXP) {
             boolean store = !event.getKeepLevel() || overrideKeepLevel;
             if (store) {
                 xp = Math.round(ExperienceUtils.getExp(player) * xpKeepPercentage);
+                xpCaptured = true;
                 event.setDroppedExp(0);
-                if (event.getKeepLevel() && overrideKeepLevel) {
-                    player.setLevel(0);
-                    player.setExp(0f);
-                    player.setTotalExperience(0);
-                }
+                event.setShouldDropExperience(false);
+                event.setKeepLevel(false);
+                event.setNewExp(0);
+                event.setNewLevel(0);
+                event.setNewTotalExp(0);
             }
         }
 
@@ -127,18 +136,45 @@ public class DeathListener implements Listener {
             if (debug) CloverLogger.info("[{}] grave created", player.getName());
         } catch (Exception ex) {
             CloverLogger.error("failed to create a grave for {}; restoring captured items and xp", player.getName(), ex);
-            restoreOnFailure(player, drops, xp);
+            restoreOnFailure(player, drops);
+            if (xpCaptured) {
+                restoreExperienceEvent(
+                        event,
+                        originalDroppedExp,
+                        originalShouldDropExperience,
+                        originalKeepLevel,
+                        originalNewExp,
+                        originalNewLevel,
+                        originalNewTotalExp
+                );
+            }
         }
     }
 
-    private static void restoreOnFailure(Player player, List<ItemStack> drops, int xp) {
+    private static void restoreOnFailure(Player player, List<ItemStack> drops) {
         for (ItemStack item : drops) {
             if (item == null || item.getType().isAir()) continue;
             for (ItemStack extra : player.getInventory().addItem(item).values()) {
                 player.getWorld().dropItem(player.getLocation(), extra);
             }
         }
-        if (xp > 0) ExperienceUtils.changeExp(player, xp);
+    }
+
+    private static void restoreExperienceEvent(
+            PlayerDeathEvent event,
+            int droppedExp,
+            boolean shouldDropExperience,
+            boolean keepLevel,
+            int newExp,
+            int newLevel,
+            int newTotalExp
+    ) {
+        event.setDroppedExp(droppedExp);
+        event.setShouldDropExperience(shouldDropExperience);
+        event.setKeepLevel(keepLevel);
+        event.setNewExp(newExp);
+        event.setNewLevel(newLevel);
+        event.setNewTotalExp(newTotalExp);
     }
 
     private static void relocateIfUnsafe(Location location, Player player, boolean debug) {

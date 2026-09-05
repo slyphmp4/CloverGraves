@@ -7,6 +7,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public final class ArmorStandGraveHologram implements GraveHologram {
     private static final double NAME_OFFSET = 0.35;
@@ -14,6 +15,7 @@ public final class ArmorStandGraveHologram implements GraveHologram {
     private final Location topLocation;
     private final float lineSpacing;
     private final List<ArmorStand> stands = new ArrayList<>();
+    private boolean removed;
 
     public ArmorStandGraveHologram(@NotNull Location topLocation, @NotNull List<String> lines, float lineSpacing) {
         this.topLocation = topLocation.clone();
@@ -23,24 +25,32 @@ public final class ArmorStandGraveHologram implements GraveHologram {
 
     @Override
     public void setLines(@NotNull List<String> lines) {
-        if (stands.size() != lines.size()) {
+        if (removed || stands.size() != lines.size()) {
             rebuild(lines);
             return;
         }
 
         for (int i = 0; i < lines.size(); i++) {
             ArmorStand stand = stands.get(i);
-            if (!stand.isValid()) {
+            if (stand.isDead()) {
                 rebuild(lines);
                 return;
             }
-            stand.setCustomName(lines.get(i));
-            stand.setCustomNameVisible(true);
+
+            String line = lines.get(i);
+            if (!Objects.equals(stand.getCustomName(), line)) {
+                stand.setCustomNameVisible(false);
+                stand.setCustomName(null);
+                stand.setCustomName(line);
+                stand.setCustomNameVisible(true);
+            }
         }
     }
 
     private void rebuild(@NotNull List<String> lines) {
-        remove();
+        removeStands();
+        removed = false;
+
         for (int i = 0; i < lines.size(); i++) {
             Location lineLocation = topLocation.clone().add(0, -i * lineSpacing - NAME_OFFSET, 0);
             ArmorStand stand = (ArmorStand) topLocation.getWorld().spawnEntity(lineLocation, EntityType.ARMOR_STAND);
@@ -65,14 +75,20 @@ public final class ArmorStandGraveHologram implements GraveHologram {
 
     @Override
     public boolean isValid() {
+        if (removed) return false;
         for (ArmorStand stand : stands) {
-            if (!stand.isValid()) return false;
+            if (stand.isDead()) return false;
         }
         return true;
     }
 
     @Override
     public void remove() {
+        removed = true;
+        removeStands();
+    }
+
+    private void removeStands() {
         for (ArmorStand stand : stands) {
             try {
                 stand.remove();
