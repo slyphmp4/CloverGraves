@@ -1,6 +1,5 @@
 package com.slyph.clovergraves.utils;
 
-import com.artillexstudios.axapi.utils.logging.LogUtils;
 import org.bukkit.entity.Player;
 import org.bukkit.permissions.PermissionAttachmentInfo;
 import org.jetbrains.annotations.NotNull;
@@ -13,29 +12,23 @@ public class LimitUtils {
     private static final String PREFIX = "axgraves.limit.";
 
     public static int getGraveLimit(Player player) {
-        int am = 0;
+        int amount = 0;
         boolean has = false;
 
-        for (PermissionAttachmentInfo pai : player.getEffectivePermissions()) {
-            if (!pai.getValue()) continue;
+        for (PermissionAttachmentInfo permissionInfo : player.getEffectivePermissions()) {
+            if (!permissionInfo.getValue()) continue;
 
-            OptionalInt value = parseLimitNode(pai.getPermission());
+            OptionalInt value = parseLimitNode(permissionInfo.getPermission());
             if (value.isEmpty()) continue;
 
-            am = Math.max(am, value.getAsInt());
+            amount = Math.max(amount, value.getAsInt());
             has = true;
         }
 
         if (!has) return CONFIG.getInt("grave-limit", -1);
-        return am;
+        return amount;
     }
 
-    /**
-     * Parses the numeric suffix of an {@code axgraves.limit.<n>} node. Permission plugins
-     * routinely grant wildcard nodes like {@code axgraves.limit.*} (or malformed children like
-     * {@code axgraves.limit.5.foo}) - the previous unguarded {@code Integer.parseInt} threw on
-     * either, and that exception propagated out of the unprotected death path.
-     */
     @NotNull
     public static OptionalInt parseLimitNode(@NotNull String permission) {
         if (!permission.startsWith(PREFIX)) return OptionalInt.empty();
@@ -44,7 +37,7 @@ public class LimitUtils {
         try {
             return OptionalInt.of(Integer.parseInt(suffix));
         } catch (NumberFormatException ex) {
-            LogUtils.warn("invalid grave-limit permission node '{}', ignoring", permission);
+            CloverLogger.warn("invalid grave-limit permission node '{}', ignoring", permission);
             return OptionalInt.empty();
         }
     }
