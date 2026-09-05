@@ -6,6 +6,7 @@ import com.slyph.clovergraves.config.GraveSettings;
 import com.slyph.clovergraves.config.HologramSettings;
 import com.slyph.clovergraves.grave.hologram.GraveHologram;
 import com.slyph.clovergraves.grave.hologram.TextDisplayGraveHologram;
+import com.slyph.clovergraves.listeners.DeathListener;
 import com.slyph.clovergraves.schedulers.CloverScheduler;
 import com.slyph.clovergraves.schedulers.CloverTask;
 import com.slyph.clovergraves.storage.EndReason;
@@ -52,6 +53,7 @@ public class Grave {
     private static final Vector ZERO_VECTOR = new Vector(0, 0, 0);
     private static final long TICK_PERIOD = 2L;
     private static final float HOLOGRAM_LINE_SPACING = 0.3f;
+    private static final long INTERACTION_DEBOUNCE_NANOS = 100_000_000L;
 
     private final long spawned;
     private final Location location;
@@ -65,6 +67,7 @@ public class Grave {
     private final CloverTask tickTask;
     private final AtomicBoolean removed = new AtomicBoolean(false);
     private final Map<UUID, Long> lastProtectionNotice = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> lastInteractionAt = new ConcurrentHashMap<>();
 
     private GraveHologram hologram;
     private long lastHologramUpdateAt;
@@ -121,6 +124,9 @@ public class Grave {
         entity.setCollidable(false);
         entity.setCanPickupItems(false);
         if (entity.getEquipment() != null) entity.getEquipment().setHelmet(Utils.getPlayerHead(offlinePlayer));
+        entity.addDisabledSlots(EquipmentSlot.HEAD);
+        entity.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.ADDING_OR_CHANGING);
+        entity.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
 
         float yaw = CONFIG.getBoolean("rotate-head-360", true)
                 ? location.getYaw()
@@ -147,7 +153,7 @@ public class Grave {
             return;
         }
 
-        if (settings.autoRotationEnabled() && entity.isValid()) {
+        if (settings.autoRotationEnabled() && !entity.isDead()) {
             Location current = entity.getLocation();
             entity.setRotation(current.getYaw() + settings.autoRotationSpeed(), current.getPitch());
         }
@@ -174,6 +180,7 @@ public class Grave {
 
     private void performInteraction(@NotNull Player opener, boolean instantPickupRequested) {
         if (removed.get()) return;
+        if (!acceptInteraction(opener)) return;
 
         GraveSettings settings = GraveSettings.current();
         if (!opener.getWorld().equals(location.getWorld())) return;
@@ -211,6 +218,12 @@ public class Grave {
         opener.openInventory(contents.openFor(holder, rows));
     }
 
+    private boolean acceptInteraction(@NotNull Player opener) {
+        long now = System.nanoTime();
+        Long previous = lastInteractionAt.put(opener.getUniqueId(), now);
+        return previous == null || now - previous >= INTERACTION_DEBOUNCE_NANOS;
+    }
+
     private boolean isProtected(@NotNull GraveSettings settings) {
         if (settings.protectionSeconds() <= 0) return false;
         return System.currentTimeMillis() - spawned < settings.protectionSeconds() * 1_000L;
@@ -229,7 +242,9 @@ public class Grave {
 
     private void transferXP(@NotNull Player opener) {
         int xp = contents.takeXP();
-        if (xp != 0) ExperienceUtils.changeExp(opener, xp);
+        if (xp == 0) return;
+        DeathListener.releasePendingExperienceReset(opener);
+        ExperienceUtils.changeExp(opener, xp);
     }
 
     private void instantPickup(@NotNull Player opener, @NotNull GraveSettings settings) {
@@ -321,7 +336,11 @@ public class Grave {
     }
 
     private void updateHologramText(boolean force) {
-        if (hologram == null || !hologram.isValid()) {
+        if (hologram == null) {
+            updateHologram();
+            return;
+        }
+        if (!hologram.isValid()) {
             updateHologram();
             return;
         }
@@ -335,7 +354,7 @@ public class Grave {
     @NotNull
     private List<Component> formatHologramLines(long now) {
         GraveSnapshot snapshot = contents.snapshot();
-        int despawnTime = CONFIG.getInt("despawn-time-seconds", 1800);
+        int despawnTime = GraveSettings.current().despawnTimeSeconds();
         long remaining;
         if (despawnTime == -1) {
             remaining = Math.max(0L, now - spawned);

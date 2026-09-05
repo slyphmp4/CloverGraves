@@ -18,7 +18,7 @@ public final class TextDisplayGraveHologram implements GraveHologram {
 
     private final Location displayLocation;
     private final HologramSettings settings;
-    private final boolean replaceOnTextUpdate;
+    private final boolean cardboard;
     private TextDisplay display;
     private Component currentText;
 
@@ -26,7 +26,7 @@ public final class TextDisplayGraveHologram implements GraveHologram {
                                     @NotNull HologramSettings settings, float lineSpacing) {
         displayLocation = topLocation.clone().add(0, -lineSpacing * Math.max(0, lines.size() - 1) + 0.25, 0);
         this.settings = settings;
-        replaceOnTextUpdate = isCardboard();
+        cardboard = isCardboard();
         currentText = joinLines(lines);
         display = spawnDisplay(currentText);
     }
@@ -34,16 +34,9 @@ public final class TextDisplayGraveHologram implements GraveHologram {
     @Override
     public void setLines(@NotNull List<Component> lines) {
         Component nextText = joinLines(lines);
-        if (!isValid()) {
-            currentText = nextText;
-            display = spawnDisplay(nextText);
-            return;
-        }
         if (nextText.equals(currentText)) return;
 
-        if (replaceOnTextUpdate) {
-            TextDisplay previous = display;
-            previous.remove();
+        if (display == null || display.isDead()) {
             display = spawnDisplay(nextText);
         } else {
             display.text(nextText);
@@ -58,12 +51,13 @@ public final class TextDisplayGraveHologram implements GraveHologram {
 
     @Override
     public boolean isValid() {
-        return display != null && display.isValid() && !display.isDead();
+        if (display == null || display.isDead()) return false;
+        return cardboard || display.isValid();
     }
 
     @Override
     public void remove() {
-        if (display != null) display.remove();
+        if (display != null && !display.isDead()) display.remove();
     }
 
     @NotNull

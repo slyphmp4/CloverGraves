@@ -16,6 +16,7 @@ import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.TextDisplay;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
@@ -49,6 +50,15 @@ public final class CardboardCompatibilitySelfTest {
             armorStand.setPersistent(false);
             armorStand.setInvulnerable(true);
             if (armorStand.getEquipment() != null) armorStand.getEquipment().setHelmet(new ItemStack(Material.PLAYER_HEAD));
+            armorStand.addDisabledSlots(EquipmentSlot.HEAD);
+            armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.ADDING_OR_CHANGING);
+            armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
+            if (!armorStand.isSlotDisabled(EquipmentSlot.HEAD)) {
+                throw new IllegalStateException("ArmorStand head slot is not disabled");
+            }
+            if (!armorStand.hasEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING)) {
+                throw new IllegalStateException("ArmorStand head removal lock failed");
+            }
 
             TextDisplay entityTypeDisplay = (TextDisplay) world.spawnEntity(location.clone().add(0, 1, 0), EntityType.TEXT_DISPLAY);
             spawned.add(entityTypeDisplay);
@@ -68,6 +78,7 @@ public final class CardboardCompatibilitySelfTest {
             if (!hologram.isValid()) throw new IllegalStateException("TextDisplay hologram failed to spawn");
 
             TextDisplay display = hologram.display();
+            UUID displayId = display.getUniqueId();
             if (display.getAlignment() != settings.alignment()) throw new IllegalStateException("TextDisplay alignment failed");
             if (display.getBillboard() != settings.billboard()) throw new IllegalStateException("TextDisplay billboard failed");
             if (display.isSeeThrough() != settings.seeThrough()) throw new IllegalStateException("TextDisplay see-through failed");
@@ -84,11 +95,10 @@ public final class CardboardCompatibilitySelfTest {
 
             String[] timerValues = {"00:29:00", "00:28:59", "00:28:58"};
             for (String timer : timerValues) {
-                UUID previousId = hologram.display().getUniqueId();
                 hologram.setLines(List.of(Component.text("CloverGraves"), Component.text(timer)));
                 display = hologram.display();
-                if (previousId.equals(display.getUniqueId())) {
-                    throw new IllegalStateException("Cardboard TextDisplay update did not replace the display entity");
+                if (!displayId.equals(display.getUniqueId())) {
+                    throw new IllegalStateException("TextDisplay entity was replaced during timer update");
                 }
                 if (!("CloverGraves\n" + timer).equals(PLAIN.serialize(display.text()))) {
                     throw new IllegalStateException("TextDisplay timer update failed at " + timer);

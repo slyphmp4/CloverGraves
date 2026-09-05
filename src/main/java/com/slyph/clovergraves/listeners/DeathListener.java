@@ -1,5 +1,6 @@
 package com.slyph.clovergraves.listeners;
 
+import com.destroystokyo.paper.event.player.PlayerPostRespawnEvent;
 import com.slyph.clovergraves.AxGraves;
 import com.slyph.clovergraves.api.events.GravePreSpawnEvent;
 import com.slyph.clovergraves.api.events.GraveSpawnEvent;
@@ -45,7 +46,6 @@ public class DeathListener implements Listener {
     private static List<String> disabledWorlds;
     private static List<String> blacklistedDeathCauses;
     private static boolean overrideKeepInventory;
-    private static boolean overrideKeepLevel;
     private static boolean storeItems;
     private static boolean storeXP;
     private static float xpKeepPercentage;
@@ -54,7 +54,6 @@ public class DeathListener implements Listener {
         disabledWorlds = CONFIG.getStringList("disabled-worlds");
         blacklistedDeathCauses = CONFIG.getStringList("blacklisted-death-causes");
         overrideKeepInventory = CONFIG.getBoolean("override-keep-inventory", true);
-        overrideKeepLevel = CONFIG.getBoolean("override-keep-level", true);
         storeItems = CONFIG.getBoolean("store-items", true);
         storeXP = CONFIG.getBoolean("store-xp", true);
         xpKeepPercentage = CONFIG.getFloat("xp-keep-percentage", 1f);
@@ -123,17 +122,15 @@ public class DeathListener implements Listener {
         int xp = 0;
         boolean xpCaptured = false;
         if (storeXP) {
-            boolean store = !event.getKeepLevel() || overrideKeepLevel;
-            if (store) {
-                xp = Math.round(ExperienceUtils.getExp(player) * xpKeepPercentage);
-                xpCaptured = true;
-                event.setDroppedExp(0);
-                event.setShouldDropExperience(false);
-                event.setKeepLevel(false);
-                event.setNewExp(0);
-                event.setNewLevel(0);
-                event.setNewTotalExp(0);
-            }
+            int currentXP = Math.max(0, ExperienceUtils.getExp(player));
+            xp = Math.round(currentXP * xpKeepPercentage);
+            xpCaptured = currentXP > 0;
+            event.setDroppedExp(0);
+            event.setShouldDropExperience(false);
+            event.setKeepLevel(false);
+            event.setNewExp(0);
+            event.setNewLevel(0);
+            event.setNewTotalExp(0);
         }
 
         if (drops.isEmpty() && xp == 0) return;
@@ -178,12 +175,26 @@ public class DeathListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onRespawn(@NotNull PlayerRespawnEvent event) {
-        resetExperienceNextTick(event.getPlayer().getUniqueId());
+        UUID playerId = event.getPlayer().getUniqueId();
+        scheduleExperienceReset(playerId, 1L, false);
+        scheduleExperienceReset(playerId, 3L, false);
+        scheduleExperienceReset(playerId, 5L, true);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPostRespawn(@NotNull PlayerPostRespawnEvent event) {
+        resetExperienceAndRelease(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onJoin(@NotNull PlayerJoinEvent event) {
-        resetExperienceNextTick(event.getPlayer().getUniqueId());
+        UUID playerId = event.getPlayer().getUniqueId();
+        scheduleExperienceReset(playerId, 1L, false);
+        scheduleExperienceReset(playerId, 3L, true);
+    }
+
+    public static void releasePendingExperienceReset(@NotNull Player player) {
+        PENDING_EXPERIENCE_RESET.remove(player.getUniqueId());
     }
 
     private static void captureExperience(@NotNull Player player) {
@@ -191,14 +202,20 @@ public class DeathListener implements Listener {
         resetExperience(player);
     }
 
-    private static void resetExperienceNextTick(@NotNull UUID playerId) {
+    private static void scheduleExperienceReset(@NotNull UUID playerId, long delay, boolean release) {
         if (!PENDING_EXPERIENCE_RESET.contains(playerId)) return;
-        Bukkit.getScheduler().runTask(AxGraves.getInstance(), () -> {
+        Bukkit.getScheduler().runTaskLater(AxGraves.getInstance(), () -> {
+            if (!PENDING_EXPERIENCE_RESET.contains(playerId)) return;
             Player player = Bukkit.getPlayer(playerId);
             if (player == null) return;
-            if (!PENDING_EXPERIENCE_RESET.remove(playerId)) return;
             resetExperience(player);
-        });
+            if (release) PENDING_EXPERIENCE_RESET.remove(playerId);
+        }, delay);
+    }
+
+    private static void resetExperienceAndRelease(@NotNull Player player) {
+        if (!PENDING_EXPERIENCE_RESET.remove(player.getUniqueId())) return;
+        resetExperience(player);
     }
 
     private static void resetExperience(@NotNull Player player) {

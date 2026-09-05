@@ -28,15 +28,8 @@ public class GraveEntityInteractListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onManipulate(@NotNull PlayerArmorStandManipulateEvent event) {
-        Grave grave = SpawnedGraves.getGrave(event.getRightClicked().getUniqueId());
-        if (grave == null) return;
-
-        boolean alreadyCancelled = event.isCancelled();
+        if (SpawnedGraves.getGrave(event.getRightClicked().getUniqueId()) == null) return;
         event.setCancelled(true);
-        if (alreadyCancelled) return;
-        if (event.getHand() != EquipmentSlot.HAND) return;
-
-        grave.interact(event.getPlayer(), EquipmentSlot.HAND);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)

@@ -6,7 +6,6 @@ dropped-item-velocity: true
 enable-instant-pickup: true
 instant-pickup-only-own: false
 override-keep-inventory: false
-override-keep-level: false
 hologram-height: 0.5
 head-height: -1.2
 rotate-head-360: true
@@ -132,4 +131,4 @@ update-notifier:
 
 debug: false
 
-version: 24
+version: 25
