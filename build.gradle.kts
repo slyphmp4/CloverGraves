@@ -25,6 +25,11 @@ dependencies {
 
     testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.spigotmc:spigot-api:1.20.2-R0.1-SNAPSHOT")
+    testImplementation("org.slf4j:slf4j-api:2.0.17")
+    testImplementation("com.github.MilkBowl:VaultAPI:1.7") {
+        isTransitive = false
+    }
     testImplementation("com.h2database:h2:2.3.232")
     testImplementation("it.unimi.dsi:fastutil:8.5.13")
 }
