@@ -1,18 +1,7 @@
 package com.slyph.clovergraves.grave;
 
-import com.artillexstudios.axapi.hologram.Hologram;
-import com.artillexstudios.axapi.hologram.HologramType;
-import com.artillexstudios.axapi.hologram.HologramTypes;
-import com.artillexstudios.axapi.hologram.page.HologramPage;
-import com.artillexstudios.axapi.items.WrappedItemStack;
-import com.artillexstudios.axapi.nms.NMSHandlers;
-import com.artillexstudios.axapi.packet.wrapper.serverbound.ServerboundInteractWrapper;
-import com.artillexstudios.axapi.packetentity.PacketEntity;
-import com.artillexstudios.axapi.packetentity.meta.entity.ArmorStandMeta;
-import com.artillexstudios.axapi.packetentity.meta.entity.TextDisplayMeta;
 import com.artillexstudios.axapi.scheduler.ScheduledTask;
 import com.artillexstudios.axapi.scheduler.Scheduler;
-import com.artillexstudios.axapi.utils.EquipmentSlot;
 import com.artillexstudios.axapi.utils.StringUtils;
 import com.slyph.clovergraves.api.events.GraveInteractEvent;
 import com.slyph.clovergraves.api.events.GraveOpenEvent;
@@ -26,15 +15,19 @@ import com.slyph.clovergraves.utils.InventoryUtils;
 import com.slyph.clovergraves.utils.LocationUtils;
 import com.slyph.clovergraves.utils.Utils;
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TextDisplay;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -55,7 +48,7 @@ import static com.slyph.clovergraves.AxGraves.MESSAGEUTILS;
 
 public class Grave {
     private static final Vector ZERO_VECTOR = new Vector(0, 0, 0);
-    private static final long TICK_PERIOD = 2L; // 100ms, matches the old EXECUTOR tick rate
+    private static final long TICK_PERIOD = 2L;
     private static final float HOLOGRAM_LINE_SPACING = 0.3f;
     private static final int HOLOGRAM_LINE_WIDTH = 1000;
 
@@ -67,14 +60,14 @@ public class Grave {
     private final int rows;
     private final GraveContents contents;
     private final GraveInventoryHolder holder;
-    private final PacketEntity entity;
+    private final ArmorStand entity;
     private final ScheduledTask tickTask;
     private final AtomicBoolean removed = new AtomicBoolean(false);
     private final Map<UUID, Long> lastProtectionNotice = new ConcurrentHashMap<>();
 
-    private Hologram hologram;
-
-    // storage bookkeeping - touched only by the single-threaded save executor, see SaveGraves
+    private TextDisplay hologram;
+    private String lastHologramText = "";
+    private long lastHologramUpdateAt;
     private volatile long storageId = -1;
     private volatile long lastPersistedVersion = -1;
 
@@ -85,9 +78,6 @@ public class Grave {
         filtered.replaceAll(ItemStack::clone);
         filtered = InventoryUtils.reorderInventory(orderSnapshot, filtered);
 
-        // a grave inventory caps at 6 rows (54 slots); anything beyond that used to make
-        // Bukkit.createInventory throw with nothing catching it. Overflow is dropped on the
-        // ground next to the grave instead of being silently discarded.
         List<ItemStack> overflow = List.of();
         if (filtered.size() > InventoryUtils.MAX_SLOTS) {
             overflow = new ArrayList<>(filtered.subList(InventoryUtils.MAX_SLOTS, filtered.size()));
@@ -111,45 +101,37 @@ public class Grave {
             location.getWorld().dropItem(location.clone(), it);
         }
 
-        Player pl = offlinePlayer.getPlayer();
-        if (pl != null && LANG.getBoolean("death-message.enabled", false)) {
-            MESSAGEUTILS.sendLang(pl, "death-message.message", Map.of(
+        Player onlinePlayer = offlinePlayer.getPlayer();
+        if (onlinePlayer != null && LANG.getBoolean("death-message.enabled", false)) {
+            MESSAGEUTILS.sendLang(onlinePlayer, "death-message.message", Map.of(
                     "%world%", LocationUtils.getWorldName(location.getWorld()),
-                    "%x%", "" + location.getBlockX(),
-                    "%y%", "" + location.getBlockY(),
-                    "%z%", "" + location.getBlockZ()));
+                    "%x%", String.valueOf(location.getBlockX()),
+                    "%y%", String.valueOf(location.getBlockY()),
+                    "%z%", String.valueOf(location.getBlockZ())));
         }
 
-        this.entity = NMSHandlers.getNmsHandler().createEntity(EntityType.ARMOR_STAND,
-                location.clone().add(0, 1 + CONFIG.getFloat("head-height", -1.2f), 0));
-        entity.setItem(EquipmentSlot.HELMET, WrappedItemStack.wrap(Utils.getPlayerHead(offlinePlayer)));
-        final ArmorStandMeta meta = (ArmorStandMeta) entity.meta();
-        meta.small(true);
-        meta.invisible(true);
-        meta.setNoBasePlate(false);
-        entity.spawn();
+        Location headLocation = location.clone().add(0, 1 + CONFIG.getFloat("head-height", -1.2f), 0);
+        this.entity = (ArmorStand) location.getWorld().spawnEntity(headLocation, EntityType.ARMOR_STAND);
+        entity.setVisible(false);
+        entity.setSmall(true);
+        entity.setBasePlate(false);
+        entity.setGravity(false);
+        entity.setInvulnerable(true);
+        entity.setSilent(true);
+        entity.setPersistent(false);
+        entity.setCollidable(false);
+        entity.setCanPickupItems(false);
+        entity.getEquipment().setHelmet(Utils.getPlayerHead(offlinePlayer));
 
-        if (CONFIG.getBoolean("rotate-head-360", true)) {
-            entity.location().setYaw(location.getYaw());
-        } else {
-            entity.location().setYaw(LocationUtils.getNearestDirection(location.getYaw()));
-        }
-        entity.teleport(entity.location());
-
-        entity.onInteract(event -> Scheduler.get().runAt(location, task -> interact(event.getPlayer(), event.getHand())));
+        float yaw = CONFIG.getBoolean("rotate-head-360", true)
+                ? location.getYaw()
+                : LocationUtils.getNearestDirection(location.getYaw());
+        entity.setRotation(yaw, 0f);
 
         updateHologram();
-
         this.tickTask = Scheduler.get().runTimerAt(location, this::tick, TICK_PERIOD, TICK_PERIOD);
     }
 
-    /**
-     * Runs every 100ms on the region owning {@link #location} - replaces the old shared
-     * {@code TickGraves} loop that ran off an async executor and read the live Bukkit inventory
-     * from it. Refreshes the published {@link GraveSnapshot} (so off-thread readers such as the
-     * storage flush always see an at-most-one-tick-old view), handles expiry/auto-rotation, and
-     * folds in the "close distant viewers" check that used to be a separate global timer.
-     */
     public void tick() {
         contents.closeViewIfEmpty();
         contents.refreshSnapshot();
@@ -158,7 +140,7 @@ public class Grave {
         GraveSnapshot snap = contents.snapshot();
 
         boolean outOfTime = settings.despawnTimeSeconds() != -1
-                && settings.despawnTimeSeconds() * 1_000L <= (System.currentTimeMillis() - spawned);
+                && settings.despawnTimeSeconds() * 1_000L <= System.currentTimeMillis() - spawned;
         boolean emptyDespawn = settings.despawnWhenEmpty() && snap.empty();
 
         if (outOfTime || emptyDespawn) {
@@ -166,11 +148,12 @@ public class Grave {
             return;
         }
 
-        if (settings.autoRotationEnabled()) {
-            entity.location().setYaw(entity.location().getYaw() + settings.autoRotationSpeed());
-            entity.teleport(entity.location());
+        if (settings.autoRotationEnabled() && entity.isValid()) {
+            Location current = entity.getLocation();
+            entity.setRotation(current.getYaw() + settings.autoRotationSpeed(), current.getPitch());
         }
 
+        updateHologramText(false);
         closeDistantViewers(settings);
     }
 
@@ -185,7 +168,7 @@ public class Grave {
         }
     }
 
-    public void interact(@NotNull Player opener, ServerboundInteractWrapper.InteractionHand slot) {
+    public void interact(@NotNull Player opener, EquipmentSlot slot) {
         GraveSettings settings = GraveSettings.current();
 
         if (!opener.getWorld().equals(location.getWorld())) return;
@@ -204,11 +187,11 @@ public class Grave {
             return;
         }
 
-        final GraveInteractEvent graveInteractEvent = new GraveInteractEvent(opener, this);
+        GraveInteractEvent graveInteractEvent = new GraveInteractEvent(opener, this);
         Bukkit.getPluginManager().callEvent(graveInteractEvent);
         if (graveInteractEvent.isCancelled()) return;
 
-        if (slot != null && slot.equals(ServerboundInteractWrapper.InteractionHand.MAIN_HAND) && opener.isSneaking()) {
+        if (slot == EquipmentSlot.HAND && opener.isSneaking()) {
             if (opener.getGameMode() == GameMode.SPECTATOR) return;
             if (!settings.enableInstantPickup()) return;
             if (settings.instantPickupOnlyOwn() && !isOwner) return;
@@ -217,13 +200,10 @@ public class Grave {
             return;
         }
 
-        final GraveOpenEvent graveOpenEvent = new GraveOpenEvent(opener, this);
+        GraveOpenEvent graveOpenEvent = new GraveOpenEvent(opener, this);
         Bukkit.getPluginManager().callEvent(graveOpenEvent);
         if (graveOpenEvent.isCancelled()) return;
 
-        // XP is granted here - after every permission/cancellation gate - rather than
-        // unconditionally at the top of this method as before, so a plugin cancelling
-        // GraveOpenEvent (or instant-pickup being disabled/owner-only) actually protects it too.
         transferXP(opener);
         opener.openInventory(contents.openFor(holder, rows));
     }
@@ -247,9 +227,7 @@ public class Grave {
 
     private void transferXP(@NotNull Player opener) {
         int xp = contents.takeXP();
-        if (xp != 0) {
-            ExperienceUtils.changeExp(opener, xp);
-        }
+        if (xp != 0) ExperienceUtils.changeExp(opener, xp);
     }
 
     private void instantPickup(@NotNull Player opener, @NotNull GraveSettings settings) {
@@ -260,38 +238,38 @@ public class Grave {
         boolean changed = false;
 
         for (int i = 0; i < snapshot.length; i++) {
-            ItemStack it = snapshot[i];
-            if (it == null || it.getType().isAir()) continue;
+            ItemStack item = snapshot[i];
+            if (item == null || item.getType().isAir()) continue;
 
             if (settings.autoEquipArmor()) {
-                Material material = it.getType();
+                Material material = item.getType();
                 if (isSlotEmpty(inventory.getHelmet()) && Utils.isHelmet(material)) {
-                    inventory.setHelmet(it);
+                    inventory.setHelmet(item);
                     snapshot[i] = null;
                     changed = true;
                     continue;
                 }
                 if (isSlotEmpty(inventory.getChestplate()) && Utils.isChestplate(material)) {
-                    inventory.setChestplate(it);
+                    inventory.setChestplate(item);
                     snapshot[i] = null;
                     changed = true;
                     continue;
                 }
                 if (isSlotEmpty(inventory.getLeggings()) && Utils.isLeggings(material)) {
-                    inventory.setLeggings(it);
+                    inventory.setLeggings(item);
                     snapshot[i] = null;
                     changed = true;
                     continue;
                 }
                 if (isSlotEmpty(inventory.getBoots()) && Utils.isBoots(material)) {
-                    inventory.setBoots(it);
+                    inventory.setBoots(item);
                     snapshot[i] = null;
                     changed = true;
                     continue;
                 }
             }
 
-            Map<Integer, ItemStack> leftover = inventory.addItem(it);
+            Map<Integer, ItemStack> leftover = inventory.addItem(item);
             changed = true;
             snapshot[i] = leftover.isEmpty() ? null : leftover.values().iterator().next();
         }
@@ -303,34 +281,58 @@ public class Grave {
     }
 
     private boolean isSlotEmpty(ItemStack item) {
-        if (item == null) return true;
-        return item.getType().isAir();
+        return item == null || item.getType().isAir();
     }
 
     public void updateHologram() {
         if (hologram != null) hologram.remove();
 
         List<String> lines = LANG.getStringList("hologram");
-
         double hologramHeight = CONFIG.getFloat("hologram-height", 0.75f) + 1;
-        hologram = new Hologram(location.clone().add(0, getNewHeight(hologramHeight, lines.size(), HOLOGRAM_LINE_SPACING), 0));
+        Location hologramLocation = location.clone().add(0, getNewHeight(hologramHeight, lines.size(), HOLOGRAM_LINE_SPACING), 0);
 
-        HologramPage<String, HologramType<String>> page = hologram.createPage(HologramTypes.TEXT);
-        page.getParameters().withParameter(Grave.class, this);
+        hologram = (TextDisplay) location.getWorld().spawnEntity(hologramLocation, EntityType.TEXT_DISPLAY);
+        HologramSettings settings = HologramSettings.parse(CONFIG.getSection("holograms"));
+        hologram.setPersistent(false);
+        hologram.setSeeThrough(settings.seeThrough());
+        hologram.setShadowed(settings.shadow());
+        hologram.setAlignment(settings.alignment());
+        hologram.setBackgroundColor(Color.fromARGB(settings.backgroundColor()));
+        hologram.setLineWidth(HOLOGRAM_LINE_WIDTH);
+        hologram.setBillboard(settings.billboard());
+        lastHologramText = "";
+        lastHologramUpdateAt = 0L;
+        updateHologramText(true);
+    }
 
-        HologramSettings hs = HologramSettings.parse(CONFIG.getSection("holograms"));
-        page.setEntityMetaHandler(m -> {
-            TextDisplayMeta meta = (TextDisplayMeta) m;
-            meta.seeThrough(hs.seeThrough());
-            meta.shadow(hs.shadow());
-            meta.alignment(hs.alignment());
-            meta.backgroundColor(hs.backgroundColor());
-            meta.lineWidth(HOLOGRAM_LINE_WIDTH);
-            meta.billboardConstrain(hs.billboard());
-        });
+    private void updateHologramText(boolean force) {
+        if (hologram == null || !hologram.isValid()) return;
 
-        page.setContent(String.join("<reset><br>", lines));
-        page.spawn();
+        long now = System.currentTimeMillis();
+        if (!force && now - lastHologramUpdateAt < 1_000L) return;
+        lastHologramUpdateAt = now;
+
+        GraveSnapshot snapshot = contents.snapshot();
+        int despawnTime = CONFIG.getInt("despawn-time-seconds", 1800);
+        long remaining = despawnTime == -1
+                ? now - spawned
+                : Math.max(0L, despawnTime * 1_000L - (now - spawned));
+
+        List<String> formatted = new ArrayList<>();
+        for (String line : LANG.getStringList("hologram")) {
+            String replaced = line
+                    .replace("%player%", playerName)
+                    .replace("%item%", String.valueOf(snapshot.itemCount()))
+                    .replace("%xp%", String.valueOf(snapshot.storedXP()))
+                    .replace("%despawn-time%", StringUtils.formatTime(remaining));
+            formatted.add(StringUtils.formatToString(replaced));
+        }
+
+        String text = String.join("\n", formatted);
+        if (force || !text.equals(lastHologramText)) {
+            hologram.setText(text);
+            lastHologramText = text;
+        }
     }
 
     private static double getNewHeight(double y, int lines, float lineHeight) {
@@ -352,7 +354,6 @@ public class Grave {
             if (tickTask != null) tickTask.cancel();
             SpawnedGraves.removeGrave(this, reason);
             removeInventory();
-
             if (entity != null) entity.remove();
             if (hologram != null) hologram.remove();
         };
@@ -364,17 +365,15 @@ public class Grave {
     public void removeInventory() {
         closeAllViewers();
 
-        // drain (and clear) contents first, then drop/publish - so a save that races this can
-        // never persist items that are simultaneously landing on the ground.
         ItemStack[] drained = contents.drainItems();
         int xp = contents.takeXP();
         contents.refreshSnapshot();
 
         GraveSettings settings = GraveSettings.current();
         if (settings.dropItems()) {
-            for (ItemStack it : drained) {
-                if (it == null || it.getType().isAir()) continue;
-                Item dropped = location.getWorld().dropItem(location.clone(), it);
+            for (ItemStack item : drained) {
+                if (item == null || item.getType().isAir()) continue;
+                Item dropped = location.getWorld().dropItem(location.clone(), item);
                 if (!settings.droppedItemVelocity()) dropped.setVelocity(ZERO_VECTOR);
             }
         }
@@ -393,14 +392,6 @@ public class Grave {
         }
     }
 
-    /**
-     * Closes the grave's GUI for {@code viewer} by dispatching to the region that owns the
-     * *viewer*, not the grave. The previous implementation ran this on the grave's region and
-     * then called {@code viewer.closeInventory()} directly - safe on non-Folia, but a genuine
-     * cross-region entity access on Folia whenever the viewer had walked into a different region
-     * than the grave (exactly the case this is used for: closing the GUI on players who wandered
-     * too far away).
-     */
     private void closeFor(@NotNull HumanEntity viewer) {
         Scheduler.get().run(viewer, task -> viewer.closeInventory(), () -> {
         });
@@ -425,7 +416,6 @@ public class Grave {
         return removed.get();
     }
 
-    /** Storage bookkeeping - touched only by the single-threaded save executor, see SaveGraves. */
     public long storageId() {
         return storageId;
     }
@@ -454,11 +444,6 @@ public class Grave {
         return spawned;
     }
 
-    /**
-     * Materializes and returns the grave's Bukkit inventory. Kept for external API/backwards
-     * compatibility; like every other {@link GraveContents} mutator, only call this from the
-     * region owning {@link #getLocation()}.
-     */
     @NotNull
     public Inventory getGui() {
         return contents.openFor(holder, rows);
@@ -468,11 +453,11 @@ public class Grave {
         return contents.storedXP();
     }
 
-    public PacketEntity getEntity() {
+    public ArmorStand getEntity() {
         return entity;
     }
 
-    public Hologram getHologram() {
+    public TextDisplay getHologram() {
         return hologram;
     }
 
