@@ -1,7 +1,8 @@
-name: AxGraves
-version: '${project.version}'
-main: com.artillexstudios.axgraves.AxGraves
-api-version: '1.20'
+name: CloverGraves
+version: '${version}'
+main: com.slyph.clovergraves.AxGraves
+api-version: '1.16'
+authors: [slyph]
 folia-supported: true
 softdepend: [Vault]
 
@@ -14,8 +15,6 @@ permissions:
     default: true
   axgraves.list.other:
     default: op
-  # teleporting to your *own* grave is a normal player feature (that's the whole point of the
-  # cooldown/warmup on it) - tp.bypass (arbitrary coordinates, any player's grave) stays op-only
   axgraves.tp:
     default: true
   axgraves.tp.bypass:
@@ -24,9 +23,6 @@ permissions:
     default: true
   axgraves.limit.1:
     default: false
-  # already referenced in code prior to this release (grave admin bypass, update-notify
-  # broadcast) but was never declared here - permission-plugin default-grant logic for
-  # them was silently broken until now.
   axgraves.admin:
     default: op
   axgraves.update-notify:
