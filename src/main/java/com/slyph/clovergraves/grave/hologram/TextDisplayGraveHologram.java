@@ -1,9 +1,9 @@
 package com.slyph.clovergraves.grave.hologram;
 
 import com.slyph.clovergraves.config.HologramSettings;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Color;
 import org.bukkit.Location;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.TextDisplay;
 import org.jetbrains.annotations.NotNull;
 
@@ -14,13 +14,14 @@ public final class TextDisplayGraveHologram implements GraveHologram {
 
     private final TextDisplay display;
 
-    public TextDisplayGraveHologram(@NotNull Location topLocation, @NotNull List<String> lines,
+    public TextDisplayGraveHologram(@NotNull Location topLocation, @NotNull List<Component> lines,
                                     @NotNull HologramSettings settings, float lineSpacing) {
         Location displayLocation = topLocation.clone().add(0, -lineSpacing * Math.max(0, lines.size() - 1) + 0.25, 0);
-        display = (TextDisplay) topLocation.getWorld().spawnEntity(displayLocation, EntityType.TEXT_DISPLAY);
+        display = topLocation.getWorld().spawn(displayLocation, TextDisplay.class);
         display.setPersistent(false);
         display.setSeeThrough(settings.seeThrough());
         display.setShadowed(settings.shadow());
+        display.setDefaultBackground(false);
         display.setAlignment(settings.alignment());
         display.setBackgroundColor(Color.fromARGB(settings.backgroundColor()));
         display.setLineWidth(LINE_WIDTH);
@@ -29,18 +30,33 @@ public final class TextDisplayGraveHologram implements GraveHologram {
     }
 
     @Override
-    public void setLines(@NotNull List<String> lines) {
-        if (!display.isValid()) return;
-        display.setText(String.join("\n", lines));
+    public void setLines(@NotNull List<Component> lines) {
+        if (!isValid()) return;
+        display.text(joinLines(lines));
+    }
+
+    @NotNull
+    public TextDisplay display() {
+        return display;
     }
 
     @Override
     public boolean isValid() {
-        return display.isValid();
+        return display.isValid() && !display.isDead();
     }
 
     @Override
     public void remove() {
-        if (display.isValid()) display.remove();
+        if (!display.isDead()) display.remove();
+    }
+
+    @NotNull
+    private static Component joinLines(@NotNull List<Component> lines) {
+        Component result = Component.empty();
+        for (int i = 0; i < lines.size(); i++) {
+            if (i > 0) result = result.append(Component.newline());
+            result = result.append(lines.get(i));
+        }
+        return result;
     }
 }

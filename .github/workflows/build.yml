@@ -13,7 +13,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
 
@@ -35,6 +35,10 @@ jobs:
             echo 'Forbidden AxAPI/NMS/CraftBukkit dependency found in main source.'
             exit 1
           fi
+          if grep -RInE 'ArmorStandGraveHologram|GraveHologramFactory' src/main/java; then
+            echo 'Legacy hologram fallback code is still present.'
+            exit 1
+          fi
 
       - name: Build and test
         run: ./gradlew clean build --no-daemon
@@ -49,8 +53,29 @@ jobs:
             echo 'Forbidden AxAPI/NMS/CraftBukkit classes found in release jar.'
             exit 1
           fi
+          if jar tf "$JAR" | grep -E 'ArmorStandGraveHologram|GraveHologramFactory'; then
+            echo 'Legacy hologram fallback classes found in release jar.'
+            exit 1
+          fi
 
-      - name: Smoke test on slyph Cardboard 26.2
+      - name: Build fixed slyph Cardboard 26.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          CARDBOARD_SHA='5b62d59716f5a7d6dc0fa780ea7ca527e79272a5'
+          git clone --filter=blob:none --no-checkout https://github.com/slyphmp4/Cardboard.git cardboard-src
+          git -C cardboard-src fetch --depth 1 origin "$CARDBOARD_SHA"
+          git -C cardboard-src checkout --detach FETCH_HEAD
+          (
+            cd cardboard-src
+            ./gradlew clean build --no-daemon --stacktrace
+          )
+          CARDBOARD_JAR="$(find cardboard-src/build/libs -maxdepth 1 -name 'Cardboard-*.jar' | head -n 1)"
+          test -n "$CARDBOARD_JAR"
+          mkdir -p smoke/mods
+          cp "$CARDBOARD_JAR" smoke/mods/Cardboard.jar
+
+      - name: Smoke test on slyph Cardboard 26.2 with TextDisplay
         shell: bash
         run: |
           set -euo pipefail
@@ -60,7 +85,6 @@ jobs:
 
           curl -fsSL -o fabric-installer.jar 'https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.1.2/fabric-installer-1.1.2.jar'
           curl -fsSL -o smoke/mods/fabric-api.jar 'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.156.0+26.2/fabric-api-0.156.0+26.2.jar'
-          curl -fsSL -o smoke/mods/Cardboard.jar 'https://github.com/slyphmp4/Cardboard/releases/download/v26.2.13/Cardboard-26.2.12.jar'
 
           cd smoke
           java -jar ../fabric-installer.jar server -mcversion 26.2 -loader 0.19.3 -downloadMinecraft
@@ -73,7 +97,7 @@ jobs:
           view-distance=2
           simulation-distance=2
           max-players=1
-          motd=CloverGraves Cardboard CI
+          motd=CloverGraves Cardboard TextDisplay CI
           PROPERTIES
 
           mkfifo server.in
@@ -102,11 +126,11 @@ jobs:
           cat server.log
 
           if [ "$PASS" -ne 1 ]; then
-            echo 'Cardboard 26.2 self-test did not pass.'
+            echo 'Cardboard 26.2 TextDisplay self-test did not pass.'
             exit 1
           fi
-          if grep -E 'Error occurred while enabling CloverGraves|Could not load .*CloverGraves|NoClassDefFoundError.*(CloverGraves|artillexstudios)' server.log; then
-            echo 'CloverGraves runtime error detected.'
+          if grep -E 'Cannot spawn an entity for org\.bukkit\.entity\.TextDisplay|ClassCastException.*TextDisplay|AbstractMethodError|NoSuchMethodError|UnsupportedOperationException|Error occurred while enabling CloverGraves|Could not load .*CloverGraves|NoClassDefFoundError.*(CloverGraves|artillexstudios)' server.log; then
+            echo 'CloverGraves TextDisplay runtime error detected.'
             exit 1
           fi
 

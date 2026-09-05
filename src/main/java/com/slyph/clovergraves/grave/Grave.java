@@ -5,7 +5,7 @@ import com.slyph.clovergraves.api.events.GraveOpenEvent;
 import com.slyph.clovergraves.config.GraveSettings;
 import com.slyph.clovergraves.config.HologramSettings;
 import com.slyph.clovergraves.grave.hologram.GraveHologram;
-import com.slyph.clovergraves.grave.hologram.GraveHologramFactory;
+import com.slyph.clovergraves.grave.hologram.TextDisplayGraveHologram;
 import com.slyph.clovergraves.schedulers.CloverScheduler;
 import com.slyph.clovergraves.schedulers.CloverTask;
 import com.slyph.clovergraves.storage.EndReason;
@@ -16,6 +16,7 @@ import com.slyph.clovergraves.utils.InventoryUtils;
 import com.slyph.clovergraves.utils.LocationUtils;
 import com.slyph.clovergraves.utils.TextFormatter;
 import com.slyph.clovergraves.utils.Utils;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -65,7 +66,6 @@ public class Grave {
     private final Map<UUID, Long> lastProtectionNotice = new ConcurrentHashMap<>();
 
     private GraveHologram hologram;
-    private String lastHologramText = "";
     private long lastHologramUpdateAt;
     private volatile long storageId = -1;
     private volatile long lastPersistedVersion = -1;
@@ -293,22 +293,17 @@ public class Grave {
         if (hologram != null) hologram.remove();
 
         long now = System.currentTimeMillis();
-        List<String> formatted = formatHologramLines(now);
+        List<Component> formatted = formatHologramLines(now);
         double height = CONFIG.getFloat("hologram-height", 0.75f) + 1;
         Location topLocation = location.clone().add(0, height, 0);
         HologramSettings settings = HologramSettings.parse(CONFIG.getSection("holograms"));
 
-        hologram = GraveHologramFactory.create(topLocation, formatted, settings, HOLOGRAM_LINE_SPACING);
-        lastHologramText = String.join("\n", formatted);
+        hologram = new TextDisplayGraveHologram(topLocation, formatted, settings, HOLOGRAM_LINE_SPACING);
         lastHologramUpdateAt = now;
     }
 
     private void updateHologramText(boolean force) {
-        if (hologram == null) {
-            updateHologram();
-            return;
-        }
-        if (!hologram.isValid()) {
+        if (hologram == null || !hologram.isValid()) {
             updateHologram();
             return;
         }
@@ -316,29 +311,23 @@ public class Grave {
         long now = System.currentTimeMillis();
         if (!force && now - lastHologramUpdateAt < 1_000L) return;
         lastHologramUpdateAt = now;
-
-        List<String> formatted = formatHologramLines(now);
-        String text = String.join("\n", formatted);
-        if (force || !text.equals(lastHologramText)) {
-            hologram.setLines(formatted);
-            lastHologramText = text;
-        }
+        hologram.setLines(formatHologramLines(now));
     }
 
     @NotNull
-    private List<String> formatHologramLines(long now) {
+    private List<Component> formatHologramLines(long now) {
         GraveSnapshot snapshot = contents.snapshot();
         int despawnTime = CONFIG.getInt("despawn-time-seconds", 1800);
         long remaining = despawnTime == -1 ? now - spawned : Math.max(0L, despawnTime * 1_000L - (now - spawned));
 
-        List<String> formatted = new ArrayList<>();
+        List<Component> formatted = new ArrayList<>();
         for (String line : LANG.getStringList("hologram")) {
             String replaced = line
                     .replace("%player%", playerName)
                     .replace("%item%", String.valueOf(snapshot.itemCount()))
                     .replace("%xp%", String.valueOf(snapshot.storedXP()))
                     .replace("%despawn-time%", TextFormatter.formatTime(remaining));
-            formatted.add(TextFormatter.formatToString(replaced));
+            formatted.add(TextFormatter.format(replaced));
         }
         return formatted;
     }
