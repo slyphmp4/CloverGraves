@@ -16,6 +16,9 @@ auto-rotation:
 
 interact-only-own: false
 interact-radius: 7.0
+interaction-hitbox:
+  width: 1.6
+  height: 2.2
 
 protection:
   seconds: 30

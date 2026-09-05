@@ -15,6 +15,7 @@ import org.bukkit.World;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Interaction;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -54,6 +55,22 @@ public final class CardboardCompatibilitySelfTest {
             armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
             if (!armorStand.hasEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING)) {
                 throw new IllegalStateException("ArmorStand head removal lock failed");
+            }
+
+            Interaction interaction = (Interaction) world.spawnEntity(location.clone().add(0, -0.25, 0), EntityType.INTERACTION);
+            spawned.add(interaction);
+            interaction.setPersistent(false);
+            interaction.setInteractionWidth(1.6f);
+            interaction.setInteractionHeight(2.2f);
+            interaction.setResponsive(true);
+            if (Math.abs(interaction.getInteractionWidth() - 1.6f) > 0.001f) {
+                throw new IllegalStateException("Interaction width failed");
+            }
+            if (Math.abs(interaction.getInteractionHeight() - 2.2f) > 0.001f) {
+                throw new IllegalStateException("Interaction height failed");
+            }
+            if (!interaction.isResponsive()) {
+                throw new IllegalStateException("Interaction responsive state failed");
             }
 
             TextDisplay entityTypeDisplay = (TextDisplay) world.spawnEntity(location.clone().add(0, 1, 0), EntityType.TEXT_DISPLAY);
