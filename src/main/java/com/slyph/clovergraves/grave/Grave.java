@@ -124,7 +124,6 @@ public class Grave {
         entity.setCollidable(false);
         entity.setCanPickupItems(false);
         if (entity.getEquipment() != null) entity.getEquipment().setHelmet(Utils.getPlayerHead(offlinePlayer));
-        entity.addDisabledSlots(EquipmentSlot.HEAD);
         entity.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.ADDING_OR_CHANGING);
         entity.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
 

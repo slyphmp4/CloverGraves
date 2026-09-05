@@ -50,12 +50,8 @@ public final class CardboardCompatibilitySelfTest {
             armorStand.setPersistent(false);
             armorStand.setInvulnerable(true);
             if (armorStand.getEquipment() != null) armorStand.getEquipment().setHelmet(new ItemStack(Material.PLAYER_HEAD));
-            armorStand.addDisabledSlots(EquipmentSlot.HEAD);
             armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.ADDING_OR_CHANGING);
             armorStand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
-            if (!armorStand.isSlotDisabled(EquipmentSlot.HEAD)) {
-                throw new IllegalStateException("ArmorStand head slot is not disabled");
-            }
             if (!armorStand.hasEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING)) {
                 throw new IllegalStateException("ArmorStand head removal lock failed");
             }
