@@ -1,69 +1,108 @@
+<div align="center">
+
 # CloverGraves
 
-[![Build CloverGraves](https://github.com/slyphmp4/CloverGraves/actions/workflows/build.yml/badge.svg?branch=rewrite)](https://github.com/slyphmp4/CloverGraves/actions/workflows/build.yml)
-[![GitHub release](https://img.shields.io/github/v/release/slyphmp4/CloverGraves?display_name=tag)](https://github.com/slyphmp4/CloverGraves/releases/latest)
-![Minecraft 26.2](https://img.shields.io/badge/Minecraft-26.2-3C8527)
-![Java 25](https://img.shields.io/badge/Java-25-ED8B00)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+**A persistent grave system for Minecraft servers with safe placement, protected loot, history, teleportation and multiple storage backends.**
 
-CloverGraves is a lightweight grave/death-chest plugin for Minecraft 26.2. It stores a player's items and experience after death, represents the grave with a protected player head and a native `TextDisplay` hologram, and provides configurable interaction, protection, persistence, history and teleport features.
+[![Build](https://github.com/slyphmp4/CloverGraves/actions/workflows/build.yml/badge.svg?branch=rewrite)](https://github.com/slyphmp4/CloverGraves/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/slyphmp4/CloverGraves?style=flat-square)](https://github.com/slyphmp4/CloverGraves/releases)
+[![Java](https://img.shields.io/badge/Java-25-555?style=flat-square)](https://openjdk.org/)
+[![Paper](https://img.shields.io/badge/Paper-26.2-555?style=flat-square)](https://papermc.io/)
+[![License](https://img.shields.io/badge/license-MIT-555?style=flat-square)](LICENSE)
 
-The project is maintained by **slyph** and focuses on reliable Paper and Cardboard compatibility without runtime NMS, CraftBukkit internals or AxAPI dependencies.
+[Releases](https://github.com/slyphmp4/CloverGraves/releases) · [Builds](https://github.com/slyphmp4/CloverGraves/actions) · [Issues](https://github.com/slyphmp4/CloverGraves/issues)
 
-## Features
+</div>
 
-- Stores inventory contents in a grave after death.
-- Stores experience in the grave and removes the captured experience from the player on death to prevent duplication.
-- Native Adventure `Component` and `TextDisplay` holograms.
-- Protected player-head grave marker that cannot be taken or swapped by normal interaction.
-- **Right-click** to open and inspect a grave.
-- **Sneak + Right-click** for instant pickup.
-- Configurable virtual interaction hitbox for easier grave targeting.
-- Grave ownership and temporary protection for other players.
-- Configurable safe grave placement with lava, solid-block and Nether-roof checks.
-- Configurable grave lifetime, item dropping and dropped-item velocity.
-- Persistent graves across server restarts.
-- H2, SQLite and MySQL storage with JSON fallback and legacy-data migration support.
-- Grave history and administrative restoration.
-- Grave teleportation with warmup, cooldown, movement/damage cancellation and optional Vault economy cost.
-- Optional PlaceholderAPI integration.
-- Configurable messages, holograms, world names and HEX colors.
-- Permission-aware commands and tab completion.
-- No runtime AxAPI, NMS or CraftBukkit dependency.
+---
+
+## Overview
+
+CloverGraves keeps a death recoverable without turning it into a permanent keep-inventory mechanic.
+
+When a player dies, configured inventory contents and experience are captured into a persistent grave. The grave is represented by a protected player-head marker and a native `TextDisplay` hologram, can survive server restarts, and disappears once its contents are recovered or its lifetime expires.
+
+The project is designed around Paper 26.2 and Cardboard compatibility without runtime NMS, CraftBukkit internals or an AxAPI dependency.
+
+### At a glance
+
+| Area | What CloverGraves provides |
+| --- | --- |
+| Death handling | Item and XP capture with duplication-safe XP removal |
+| Grave marker | Protected player head and native `TextDisplay` hologram |
+| Interaction | Right-click inventory, sneak-right-click instant pickup |
+| Placement | Safe-location search around lava, solid blocks and Nether roof |
+| Protection | Ownership rules and temporary protection from other players |
+| Persistence | H2, SQLite, MySQL and JSON fallback/migration support |
+| Recovery | Grave list, history, restore and teleport commands |
+| Economy | Optional Vault-backed teleport cost |
+| Integration | PlaceholderAPI and public grave events |
+
+---
 
 ## Requirements
 
-| Requirement | Version / notes |
+| Component | Version / notes |
 | --- | --- |
-| Minecraft | **26.2** |
+| Minecraft / Paper build target | **26.2** |
 | Java | **25** |
-| Paper API | **26.2.build.110-stable** target |
-| Cardboard | Tested against [`slyphmp4/Cardboard`](https://github.com/slyphmp4/Cardboard) commit `5b62d59716f5a7d6dc0fa780ea7ca527e79272a5` |
-| PlaceholderAPI | Optional, tested with **2.12.3** |
-| Vault | Optional, used for economy-backed teleport costs |
+| Paper API build | `26.2.build.110-stable` |
+| Bukkit `api-version` | `1.16` |
+| PlaceholderAPI | Optional, built against **2.12.3** |
+| Vault | Optional, used for teleport costs |
 
-CloverGraves is developed primarily for Minecraft/Paper/Cardboard 26.2. Cardboard users should use a build that includes working Bukkit `TextDisplay` support; the CI pipeline validates CloverGraves against the Cardboard revision listed above.
+The Paper build target and Bukkit `api-version` are different things here: CloverGraves is compiled and tested against the modern 26.2 API, while `plugin.yml` intentionally declares `api-version: 1.16`.
+
+The CI pipeline also includes Cardboard-oriented compatibility checks for the modern runtime features CloverGraves uses, including `TextDisplay` behavior.
+
+---
 
 ## Installation
 
-1. Download `CloverGraves-2.0.0.jar` from the [latest release](https://github.com/slyphmp4/CloverGraves/releases/latest).
-2. Place the JAR in your server's `plugins` directory.
-3. Start the server once to generate the configuration files.
-4. Configure `plugins/CloverGraves/config.yml` and `messages.yml` as needed.
-5. Perform a full server restart after replacing the plugin JAR.
+1. Download `CloverGraves-2.0.0.jar` from [Releases](https://github.com/slyphmp4/CloverGraves/releases), or build the project yourself.
+2. Put the JAR into the server's `plugins/` directory.
+3. Start the server once to generate `config.yml` and `messages.yml`.
+4. Review grave lifetime, storage, protection and teleport settings.
+5. Restart the server normally after replacing the plugin JAR.
 
-Using `/reload` is not recommended, especially on Cardboard servers.
+A full restart is preferred over Bukkit's global `/reload`, particularly on compatibility layers such as Cardboard.
 
-## Grave interaction
+---
+
+## Grave lifecycle
+
+The normal flow is intentionally simple:
+
+```text
+Player dies
+    ↓
+Configured items and XP are captured
+    ↓
+CloverGraves finds a safe nearby position
+    ↓
+A protected grave marker and hologram appear
+    ↓
+Player opens or instantly collects the grave
+    ↓
+Remaining contents stay persistent
+    ↓
+Empty or expired grave is removed
+```
+
+Experience captured into the grave is removed from the normal death drop path so the same XP is not awarded twice.
+
+---
+
+## Interaction
 
 By default:
 
-- **Right-click** the grave to open its inventory.
-- **Sneak + Right-click** the grave to instantly collect its contents.
+- **Right-click** opens the grave inventory.
+- **Sneak + Right-click** performs instant pickup.
 - Left-clicking does not loot the grave.
-- Once all stored items and XP are collected, the grave marker and hologram are removed.
+- A grave is removed once all stored items and XP have been collected.
 
-CloverGraves also uses a configurable virtual interaction area so the player does not have to click a tiny ArmorStand hitbox precisely:
+Because a single skull can be annoying to target, CloverGraves also uses a configurable virtual interaction area:
 
 ```yaml
 interact-radius: 7.0
@@ -72,75 +111,209 @@ interaction-hitbox:
   height: 2.2
 ```
 
+Instant pickup can be disabled independently or limited to the grave owner.
+
+---
+
+## Safe placement
+
+A death location is not always a usable grave location. CloverGraves can search nearby for a safer position instead of placing the marker directly inside a hazard.
+
+```yaml
+safe-placement:
+  enabled: true
+  avoid-lava: true
+  avoid-solid: true
+  avoid-nether-roof: true
+  nether-roof-y: 125
+  require-ground-support: true
+  max-horizontal-radius: 16
+  max-vertical-distance: 128
+  notify-owner: true
+```
+
+World-specific height limits can also be configured for the Overworld, Nether and End.
+
+---
+
+## Protection and lifetime
+
+The default grave lifetime is 30 minutes:
+
+```yaml
+despawn-time-seconds: 1800
+```
+
+Other players are temporarily blocked by the protection window:
+
+```yaml
+protection:
+  seconds: 30
+  message-cooldown-seconds: 3
+```
+
+Ownership restrictions can be tightened further with `interact-only-own`, `instant-pickup-only-own` and permission-based administrative bypasses.
+
+When a grave expires, item dropping and dropped-item velocity are configurable rather than hard-coded.
+
+---
+
+## Items and experience
+
+Core capture settings are independent:
+
+```yaml
+xp-keep-percentage: 1.0
+store-items: true
+store-xp: true
+```
+
+The order used when reconstructing a grave inventory can also be controlled:
+
+```yaml
+grave-item-order:
+  - "ARMOR"
+  - "HAND"
+  - "OFFHAND"
+```
+
+Armor can be auto-equipped again during collection, and individual items can be excluded through the blacklist configuration.
+
+`override-keep-inventory` is disabled by default, so server/world keep-inventory behavior is not silently overridden unless explicitly requested.
+
+---
+
 ## Commands
 
-The primary command is `/clovergraves`.
+The main command is `/clovergraves`.
 
 | Command | Description |
 | --- | --- |
-| `/clovergraves` | Show CloverGraves help. |
-| `/clovergraves help` | Show command help. |
-| `/clovergraves reload` | Reload CloverGraves configuration. |
-| `/clovergraves list` | List accessible active graves. |
-| `/clovergraves tp` | Teleport to your most recent grave. |
-| `/clovergraves tp <world> <x> <y> <z>` | Teleport to a grave location or, with bypass permission, arbitrary coordinates. |
-| `/clovergraves grave tp ...` | Compatibility form of the teleport command. |
-| `/clovergraves history <player>` | Show stored grave history for a player. |
-| `/clovergraves restore <player> <id>` | Restore a grave from history. |
+| `/clovergraves` | Show command help |
+| `/clovergraves help` | Show help explicitly |
+| `/clovergraves reload` | Reload configuration |
+| `/clovergraves list` | List accessible active graves |
+| `/clovergraves tp` | Teleport to the most recent accessible grave |
+| `/clovergraves tp <world> <x> <y> <z>` | Teleport to a grave location; bypass permission can allow arbitrary coordinates |
+| `/clovergraves history <player>` | View stored grave history |
+| `/clovergraves restore <player> <id>` | Restore a grave from history |
 
-Aliases: `/graves`, `/grave`, `/axgraves`, `/axgrave`, `/bibingka`.
+Command aliases retained for compatibility:
+
+```text
+/axgraves
+/axgrave
+/graves
+/grave
+/bibingka
+```
+
+The runtime configuration also contains a configurable alias list used by CloverGraves itself.
+
+---
 
 ## Permissions
 
-Legacy `axgraves.*` permission nodes are intentionally retained for compatibility with existing permission setups.
+Legacy `axgraves.*` nodes are intentionally retained so an existing permissions setup does not need to be rewritten during migration.
 
-| Permission | Default | Description |
+| Permission | Default | Purpose |
 | --- | --- | --- |
-| `axgraves.help` | Everyone | Use help. |
-| `axgraves.reload` | OP | Reload the plugin. |
-| `axgraves.list` | Everyone | List accessible graves. |
-| `axgraves.list.other` | OP | See other players' graves in the list. |
-| `axgraves.tp` | Everyone | Use grave teleportation. |
-| `axgraves.tp.bypass` | OP | Bypass grave-location restrictions for teleport coordinates. |
-| `axgraves.allowgraves` | Everyone | Allow graves to be created for the player. |
-| `axgraves.limit.1` | Disabled | Example grave-limit permission. |
-| `axgraves.admin` | OP | Administrative bypasses. |
-| `axgraves.update-notify` | OP | Receive update notifications. |
-| `axgraves.protection.bypass` | OP | Bypass grave protection. |
-| `axgraves.history` | OP | View grave history. |
-| `axgraves.restore` | OP | Restore graves from history. |
+| `axgraves.help` | Everyone | View help |
+| `axgraves.reload` | OP | Reload CloverGraves |
+| `axgraves.list` | Everyone | List accessible graves |
+| `axgraves.list.other` | OP | Include graves owned by other players |
+| `axgraves.tp` | Everyone | Use grave teleportation |
+| `axgraves.tp.bypass` | OP | Bypass grave-location teleport restrictions |
+| `axgraves.allowgraves` | Everyone | Allow graves to be created for the player |
+| `axgraves.limit.1` | Disabled | Example grave-limit permission |
+| `axgraves.admin` | OP | Administrative bypasses |
+| `axgraves.update-notify` | OP | Receive update notifications |
+| `axgraves.protection.bypass` | OP | Bypass grave protection |
+| `axgraves.history` | OP | View grave history |
+| `axgraves.restore` | OP | Restore historical graves |
 
-## PlaceholderAPI
+---
 
-When PlaceholderAPI is installed, CloverGraves registers both the `clovergraves` namespace and the legacy `axgraves` namespace.
+## Teleportation
 
-| Placeholder | Description |
-| --- | --- |
-| `%clovergraves_grave_count%` | Number of currently active graves on the server. |
-| `%clovergraves_grave_limit%` | Grave limit for the current player, or `∞` when unlimited. |
-| `%axgraves_grave_count%` | Legacy alias for grave count. |
-| `%axgraves_grave_limit%` | Legacy alias for grave limit. |
+Players can return to a grave without making teleportation instant or consequence-free.
+
+Defaults:
+
+```yaml
+teleport:
+  cooldown-seconds: 60
+  warmup-seconds: 5
+  cancel-on-move: true
+  cancel-on-damage: true
+  cost: 0
+  currency-symbol: "₱"
+  confirmation-timeout-seconds: 15
+```
+
+If a positive `cost` is configured and Vault is available with an economy provider, the teleport can charge the player. With a zero cost, Vault is not required for ordinary grave operation.
+
+---
+
+## History and restore
+
+CloverGraves can keep a bounded history after graves are removed:
+
+```yaml
+history:
+  enabled: true
+  keep-per-player: 5
+  keep-days: 14
+```
+
+Staff with the appropriate permissions can inspect this history and restore a selected record. This is useful for support cases without turning the active-grave database into an indefinite archive.
+
+---
 
 ## Storage
 
-Set the storage backend in `config.yml`:
+The default backend is local H2:
 
 ```yaml
 storage:
   type: H2
+  table-prefix: "axgraves_"
+  flush-interval-seconds: 15
 ```
 
-Available SQL backends:
+Supported persistent backends include:
 
-- `H2` — default local database.
-- `SQLITE` — local SQLite database.
-- `MYSQL` — remote MySQL-compatible database using the configured connection details.
+| Backend | Use case |
+| --- | --- |
+| `H2` | Default local SQL database |
+| `SQLITE` | Alternative local SQLite database |
+| `MYSQL` | Remote/shared MySQL-compatible database |
+| JSON fallback | Recovery/fallback path when applicable |
 
-If SQL initialization fails, CloverGraves can fall back to its JSON storage implementation. Existing supported legacy data is migrated where applicable.
+MySQL connection-pool settings are configurable under `storage.mysql.pool`.
 
-## Colors and messages
+CloverGraves also contains migration support for compatible legacy grave data so storage modernization does not require discarding existing records.
 
-User-facing text is configurable and processed through Adventure/MiniMessage. CloverGraves accepts common legacy-style color input and HEX forms, including:
+---
+
+## PlaceholderAPI
+
+When PlaceholderAPI is installed, CloverGraves registers the `clovergraves` namespace and keeps the legacy `axgraves` aliases.
+
+| Placeholder | Result |
+| --- | --- |
+| `%clovergraves_grave_count%` | Number of currently active graves |
+| `%clovergraves_grave_limit%` | Grave limit for the current player, or `∞` when unlimited |
+| `%axgraves_grave_count%` | Legacy alias for grave count |
+| `%axgraves_grave_limit%` | Legacy alias for grave limit |
+
+---
+
+## Messages and colors
+
+Player-facing text is kept in `messages.yml`, while technical behavior stays in `config.yml`.
+
+CloverGraves accepts common legacy and HEX color forms, including:
 
 ```text
 &c
@@ -149,39 +322,88 @@ User-facing text is configurable and processed through Adventure/MiniMessage. Cl
 <#FF0000>
 ```
 
-Invalid or unsupported input should not require direct section-sign color codes in Java source.
+Hologram presentation is separately configurable:
+
+```yaml
+holograms:
+  background-color: "00000000"
+  alignment: center
+  billboard: vertical
+  see-through: false
+  shadow: true
+```
+
+---
+
+## Public API and events
+
+The plugin exposes a small API surface and grave lifecycle events for integrations.
+
+Available event classes include:
+
+```text
+GravePreSpawnEvent
+GraveSpawnEvent
+GraveInteractEvent
+GraveOpenEvent
+```
+
+This allows another plugin to observe or influence grave behavior without depending on internal implementation packages.
+
+---
+
+## Configuration files
+
+```text
+plugins/CloverGraves/
+├── config.yml
+├── messages.yml
+└── <storage files created by the selected backend>
+```
+
+`config.yml` controls placement, interaction, protection, grave limits, item/XP capture, storage, history, teleportation, world limits, blacklists, holograms and update notifications.
+
+`messages.yml` contains the editable player-facing text.
+
+---
 
 ## Building from source
+
+CloverGraves uses Gradle Kotlin DSL, Java 25 and Shadow.
 
 ```bash
 git clone https://github.com/slyphmp4/CloverGraves.git
 cd CloverGraves
+git checkout rewrite
 ./gradlew clean build
 ```
 
-The project uses the Gradle Wrapper and Java 25. The shaded release JAR is written to `build/libs/`.
+On Windows:
 
-## CI and Cardboard compatibility
+```powershell
+.\gradlew.bat clean build
+```
 
-Every release build runs the following checks before a release asset is published:
+The shaded release JAR is written to `build/libs/`.
 
-1. Source audit for forbidden AxAPI/NMS/CraftBukkit dependencies and removed hologram fallbacks.
-2. `./gradlew clean build` and automated tests.
-3. Audit of the produced shaded JAR.
-4. Build of the pinned CloverGraves-compatible Cardboard 26.2 revision.
-5. Fabric + Cardboard 26.2 runtime smoke test, including native `TextDisplay` behavior.
-6. Upload of the verified CloverGraves JAR.
+The build bundles and relocates the runtime libraries that belong inside CloverGraves while keeping Vault, PlaceholderAPI and Paper as external APIs.
 
-The release also includes `SHA256SUMS.txt` for verifying the published JAR.
+---
 
-## Bug reports and feature requests
+## Compatibility notes
 
-Use the repository's [GitHub Issues](https://github.com/slyphmp4/CloverGraves/issues) page for reproducible bugs and feature requests. For Cardboard-specific problems, include the Cardboard build/commit, CloverGraves version and the relevant server log.
+CloverGraves avoids runtime NMS and CraftBukkit internals. Modern holograms use Bukkit's native `TextDisplay` API, and Cardboard-specific checks are isolated in compatibility code and CI rather than mixed into the core grave implementation.
 
-## Credits
+The build workflow performs source/JAR checks and runtime-oriented compatibility validation before publishing artifacts.
+
+For Cardboard-specific bug reports, include the CloverGraves version, Cardboard build or commit and the relevant server log.
+
+---
+
+## Credits and license
 
 CloverGraves is maintained by **slyph**.
 
-The project started as a fork of [AxGraves](https://github.com/Artillex-Studios/AxGraves) and has since been substantially rewritten and modernized for CloverGraves, including its runtime architecture, storage, commands, interaction behavior and Cardboard compatibility work.
+The project began as a fork of [AxGraves](https://github.com/Artillex-Studios/AxGraves) and has since been substantially rewritten for the CloverGraves codebase, including storage, placement, commands, persistence and compatibility work.
 
-The project remains distributed under the [MIT License](LICENSE). The original Artillex-Studios copyright notice is preserved in the license as required.
+CloverGraves is distributed under the [MIT License](LICENSE). The original copyright notice is preserved there as required.
