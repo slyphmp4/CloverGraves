@@ -27,20 +27,17 @@ public final class GraveLifecycleService {
     private final CloverTask hologramTask;
 
     private GraveLifecycleService() {
-        rotationTask = CloverScheduler.get().runTimerAt(
-                org.bukkit.Bukkit.getWorlds().getFirst().getSpawnLocation(),
+        rotationTask = CloverScheduler.get().runTimer(
                 this::rotateActiveGraves,
                 ROTATION_PERIOD_TICKS,
                 ROTATION_PERIOD_TICKS
         );
-        viewTask = CloverScheduler.get().runTimerAt(
-                org.bukkit.Bukkit.getWorlds().getFirst().getSpawnLocation(),
+        viewTask = CloverScheduler.get().runTimer(
                 this::maintainOpenViewsAndExpiries,
                 VIEW_PERIOD_TICKS,
                 VIEW_PERIOD_TICKS
         );
-        hologramTask = CloverScheduler.get().runTimerAt(
-                org.bukkit.Bukkit.getWorlds().getFirst().getSpawnLocation(),
+        hologramTask = CloverScheduler.get().runTimer(
                 this::updateHolograms,
                 HOLOGRAM_PERIOD_TICKS,
                 HOLOGRAM_PERIOD_TICKS
@@ -110,8 +107,7 @@ public final class GraveLifecycleService {
     }
 
     private void maintainOpenViewsAndExpiries() {
-        long now = System.currentTimeMillis();
-        processExpiries(now);
+        processExpiries(System.currentTimeMillis());
 
         GraveSettings settings = GraveSettings.current();
         for (Grave grave : openViews) {
