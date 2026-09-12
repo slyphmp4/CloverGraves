@@ -14,6 +14,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -30,6 +32,7 @@ public class JsonGraveStorage implements GraveStorage {
     private final File quarantineDir;
     private final AtomicLong nextId = new AtomicLong(1);
     private final Map<Long, GraveRecord> live = new ConcurrentHashMap<>();
+    private boolean readFailed;
 
     public JsonGraveStorage(@NotNull File dataFolder) {
         this.dataFile = new File(dataFolder, "data.json");
@@ -42,7 +45,7 @@ public class JsonGraveStorage implements GraveStorage {
 
     @Override
     @NotNull
-    public List<GraveRecord> loadAll() {
+    public synchronized List<GraveRecord> loadAll() {
         List<GraveRecord> result = new ArrayList<>();
         if (!dataFile.exists()) return result;
 
@@ -51,10 +54,16 @@ public class JsonGraveStorage implements GraveStorage {
             String json = Files.readString(dataFile.toPath(), StandardCharsets.UTF_8);
             array = GSON.fromJson(json, JsonArray.class);
         } catch (Exception ex) {
-            CloverLogger.error("failed to read data.json - leaving it untouched, no graves were restored", ex);
-            return result;
+            readFailed = true;
+            throw new IllegalStateException("failed to read data.json; writes are disabled to preserve the file", ex);
         }
-        if (array == null) return result;
+        if (array == null) {
+            readFailed = true;
+            throw new IllegalStateException("data.json must contain a JSON array; writes are disabled");
+        }
+        live.clear();
+        nextId.set(1);
+        readFailed = false;
 
         int quarantined = 0;
         for (JsonElement element : array) {
@@ -101,39 +110,45 @@ public class JsonGraveStorage implements GraveStorage {
     }
 
     @Override
-    public long save(@NotNull GraveRecord record) {
-        GraveRecord toStore = assignId(record);
-        live.put(toStore.id(), toStore);
-        flush();
-        return toStore.id();
+    public synchronized long save(@NotNull GraveRecord record) {
+        return saveAll(List.of(record)).getFirst();
     }
 
     @Override
     @NotNull
-    public List<Long> saveAll(@NotNull List<GraveRecord> records) {
+    public synchronized List<Long> saveAll(@NotNull List<GraveRecord> records) {
+        Map<Long, GraveRecord> next = new HashMap<>(live);
         List<Long> ids = new ArrayList<>(records.size());
         for (GraveRecord record : records) {
             GraveRecord toStore = assignId(record);
-            live.put(toStore.id(), toStore);
+            next.put(toStore.id(), toStore);
             ids.add(toStore.id());
         }
-        if (!records.isEmpty()) flush();
+        if (!records.isEmpty()) {
+            flush(next);
+            live.clear();
+            live.putAll(next);
+        }
         return ids;
     }
 
     private GraveRecord assignId(@NotNull GraveRecord record) {
+        if (record.id() > 0) nextId.accumulateAndGet(record.id() + 1, Math::max);
         return record.id() > 0 ? record : record.withId(nextId.getAndIncrement());
     }
 
     @Override
-    public void remove(long id, @NotNull EndReason reason) {
+    public synchronized void remove(long id, @NotNull EndReason reason) {
+        Map<Long, GraveRecord> next = new HashMap<>(live);
+        next.remove(id);
+        flush(next);
         live.remove(id);
-        flush();
     }
 
-    private void flush() {
-        JsonArray array = new JsonArray(live.size());
-        for (GraveRecord record : live.values()) {
+    private void flush(Map<Long, GraveRecord> records) {
+        if (readFailed) throw new IllegalStateException("data.json is unreadable; refusing to overwrite it");
+        JsonArray array = new JsonArray(records.size());
+        for (GraveRecord record : records.values()) {
             JsonObject object = new JsonObject();
             object.addProperty("owner", record.owner().toString());
             object.addProperty("ownerName", record.ownerName());
@@ -145,15 +160,28 @@ public class JsonGraveStorage implements GraveStorage {
             array.add(object);
         }
 
+        Path temp = null;
         try {
             File parent = dataFile.getParentFile();
             if (parent != null && !parent.exists()) parent.mkdirs();
 
-            Path temp = Files.createTempFile(dataFile.toPath().getParent(), "data", ".json.tmp");
+            temp = Files.createTempFile(dataFile.toPath().getParent(), "data", ".json.tmp");
             Files.writeString(temp, GSON.toJson(array), StandardCharsets.UTF_8);
-            Files.move(temp, dataFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            try {
+                Files.move(temp, dataFile.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException ex) {
+                Files.move(temp, dataFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException ex) {
-            CloverLogger.error("failed to save data.json", ex);
+            throw new IllegalStateException("failed to save data.json", ex);
+        } finally {
+            if (temp != null) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (IOException ex) {
+                    CloverLogger.warn("failed to clean up temporary grave file {}", temp);
+                }
+            }
         }
     }
 
@@ -177,6 +205,6 @@ public class JsonGraveStorage implements GraveStorage {
 
     @Override
     public void close() {
-        flush();
+        // Every mutation is already persisted; never overwrite a file just by closing it.
     }
 }

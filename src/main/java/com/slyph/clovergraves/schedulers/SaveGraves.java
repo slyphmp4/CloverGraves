@@ -64,6 +64,7 @@ public class SaveGraves {
         List<GraveRecord> records = new ArrayList<>();
 
         for (Grave grave : SpawnedGraves.getGraves()) {
+            if (grave.isRemoved()) continue;
             GraveSnapshot snapshot = grave.snapshot();
             if (snapshot.version() == grave.lastPersistedVersion()) continue;
 
@@ -76,7 +77,6 @@ public class SaveGraves {
         try {
             List<Long> ids = storage.saveAll(records);
             if (ids.size() != requests.size()) {
-                clearFailedRemovalTombstones(requests);
                 CloverLogger.error("storage returned {} ids for {} dirty graves; none were marked persisted", ids.size(), requests.size());
                 return;
             }
@@ -85,59 +85,61 @@ public class SaveGraves {
                 long assignedId = ids.get(i);
                 PersistRequest request = requests.get(i);
                 if (assignedId <= 0) {
-                    if (request.grave().isRemoved()) SpawnedGraves.consumeUnsavedRemoval(request.grave());
                     continue;
                 }
 
                 request.grave().assignStorageId(assignedId);
                 EndReason removedReason = SpawnedGraves.consumeUnsavedRemoval(request.grave());
                 if (removedReason != null) {
-                    storage.remove(assignedId, removedReason);
+                    removeOrRetry(storage, assignedId, removedReason);
                     continue;
                 }
                 request.grave().markPersisted(request.snapshot().version());
             }
         } catch (RuntimeException ex) {
-            clearFailedRemovalTombstones(requests);
             CloverLogger.error("failed to batch-save {} dirty grave(s)", records.size(), ex);
         }
     }
 
-    private static void clearFailedRemovalTombstones(@NotNull List<PersistRequest> requests) {
-        for (PersistRequest request : requests) {
-            if (request.grave().isRemoved()) SpawnedGraves.consumeUnsavedRemoval(request.grave());
-        }
-    }
-
-    private static void flushRemovals(@NotNull GraveStorage storage) {
+    public static void flushRemovals(@NotNull GraveStorage storage) {
         SpawnedGraves.PendingRemoval removal;
         while ((removal = SpawnedGraves.pollRemoval()) != null) {
             try {
                 storage.remove(removal.storageId(), removal.reason());
             } catch (RuntimeException ex) {
+                SpawnedGraves.retryRemoval(removal);
                 CloverLogger.error("failed to remove grave {} from storage", removal.storageId(), ex);
+                break; // Retry on the next flush, without spinning on an unavailable backend.
             }
         }
     }
 
     private static void persistOne(@NotNull Grave grave, @NotNull GraveSnapshot snapshot, @NotNull GraveStorage storage) {
+        if (grave.isRemoved() || snapshot.version() <= grave.lastPersistedVersion()) return;
         try {
             long assignedId = storage.save(toRecord(grave, snapshot));
             if (assignedId <= 0) {
-                if (grave.isRemoved()) SpawnedGraves.consumeUnsavedRemoval(grave);
                 return;
             }
 
             grave.assignStorageId(assignedId);
             EndReason removedReason = SpawnedGraves.consumeUnsavedRemoval(grave);
             if (removedReason != null) {
-                storage.remove(assignedId, removedReason);
+                removeOrRetry(storage, assignedId, removedReason);
                 return;
             }
             grave.markPersisted(snapshot.version());
         } catch (RuntimeException ex) {
-            if (grave.isRemoved()) SpawnedGraves.consumeUnsavedRemoval(grave);
             CloverLogger.error("failed to save a grave to storage", ex);
+        }
+    }
+
+    private static void removeOrRetry(GraveStorage storage, long id, EndReason reason) {
+        try {
+            storage.remove(id, reason);
+        } catch (RuntimeException ex) {
+            SpawnedGraves.retryRemoval(new SpawnedGraves.PendingRemoval(id, reason));
+            CloverLogger.error("failed to remove grave {}; queued for retry", id, ex);
         }
     }
 

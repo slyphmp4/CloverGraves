@@ -26,6 +26,16 @@ class SafeLocationFinderTest {
     }
 
     @Test
+    void clampingToASafeHeightIsReportedAsRelocation() {
+        FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SAFE);
+        probe.set(0, 63, 0, ProbeResult.SOLID);
+        SafeLocationFinder.Result result = SafeLocationFinder.find(probe, 0, -500, 0, settings(64, 319));
+        assertTrue(result.found());
+        assertTrue(result.relocated());
+        assertEquals(64, result.y());
+    }
+
+    @Test
     void safeDeathSpotOnSolidGroundIsNotRelocated() {
         FakeBlockProbe probe = new FakeBlockProbe(ProbeResult.SAFE);
         probe.set(0, 63, 0, ProbeResult.SOLID); // the ground the player is standing on

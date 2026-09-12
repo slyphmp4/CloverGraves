@@ -13,7 +13,8 @@ public class LocationUtils {
 
     @NotNull
     public static Location getCenterOf(@NotNull Location location, boolean keepYaw, boolean keepPitch) {
-        Location loc = location.getBlock().getLocation().add(0.5, 0.5, 0.5);
+        Location loc = new Location(location.getWorld(), location.getBlockX() + 0.5,
+                location.getBlockY() + 0.5, location.getBlockZ() + 0.5);
         if (keepYaw) loc.setYaw(location.getYaw());
         if (keepPitch) loc.setPitch(location.getPitch());
         return loc;

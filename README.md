@@ -208,7 +208,8 @@ Command aliases retained for compatibility:
 /bibingka
 ```
 
-The runtime configuration also contains a configurable alias list used by CloverGraves itself.
+Command aliases are registered from `plugin.yml`. The legacy `command-aliases`
+configuration key is currently not read by the command registration code.
 
 ---
 

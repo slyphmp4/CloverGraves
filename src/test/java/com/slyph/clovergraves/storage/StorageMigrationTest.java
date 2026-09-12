@@ -17,6 +17,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class StorageMigrationTest {
     @TempDir
@@ -99,5 +100,24 @@ class StorageMigrationTest {
         assertEquals(1, all.size());
         assertEquals(existingOwner, all.getFirst().owner());
         assertTrue(new File(dataFolder, "data.json").exists());
+    }
+
+    @Test
+    void failedBatchPreservesSourceAndRollsBackAlreadyInsertedRecords() throws Exception {
+        writeLegacyDataJson(UUID.randomUUID());
+        var file = new File(dataFolder, "data.json").toPath();
+        var array = com.google.gson.JsonParser.parseString(Files.readString(file)).getAsJsonArray();
+        var invalid = array.get(0).getAsJsonObject().deepCopy();
+        array.get(0).getAsJsonObject().addProperty("xp", 5);
+        array.add(invalid);
+        String original = array.toString();
+        Files.writeString(file, original);
+        try (Connection connection = openConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("ALTER TABLE axgraves_graves ADD CONSTRAINT reject_xp CHECK (stored_xp < 10)");
+        }
+        assertThrows(IllegalStateException.class, () -> StorageMigration.migrateIfNeeded(dataFolder, target));
+        assertEquals(original, Files.readString(new File(dataFolder, "data.json").toPath()));
+        assertTrue(target.loadAll().isEmpty());
+        assertFalse(new File(dataFolder, "data.json.migrated").exists());
     }
 }

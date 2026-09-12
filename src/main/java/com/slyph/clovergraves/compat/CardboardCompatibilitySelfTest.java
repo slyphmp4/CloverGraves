@@ -146,7 +146,7 @@ public final class CardboardCompatibilitySelfTest {
             if (!lifecycleGrave.isRemoved()) throw new IllegalStateException("test grave was not removed");
             lifecycleGrave = null;
 
-            Bukkit.createInventory(null, 9, "CloverGraves Test");
+            Bukkit.createInventory(null, 9, Component.text("CloverGraves Test"));
             CloverLogger.info("CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_PASS");
         } catch (Throwable throwable) {
             CloverLogger.error("CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_FAIL", throwable);

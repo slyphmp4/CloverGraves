@@ -63,6 +63,9 @@ public final class GraveLifecycleService {
     public void unregister(@NotNull Grave grave) {
         expiryByGrave.remove(grave);
         openViews.remove(grave);
+        if (expiries.size() > expiryByGrave.size() * 2L + 128) {
+            expiries.removeIf(entry -> !expiryByGrave.containsKey(entry.grave()));
+        }
     }
 
     public void markViewOpen(@NotNull Grave grave) {

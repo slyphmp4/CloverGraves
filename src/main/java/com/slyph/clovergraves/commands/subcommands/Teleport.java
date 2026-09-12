@@ -73,20 +73,21 @@ public enum Teleport {
         }
 
         TeleportWarmups.startPending(uuid, sender.getLocation());
+        TeleportWarmups.Pending pending = Objects.requireNonNull(TeleportWarmups.get(uuid));
         MESSAGEUTILS.sendLang(sender, "teleport.warmup-start", Map.of("%seconds%", String.valueOf(warmupSeconds)));
 
         for (int second = 1; second <= warmupSeconds; second++) {
             boolean last = second == warmupSeconds;
             int secondsLeft = warmupSeconds - second;
             CloverScheduler.get().runLater(sender, task -> {
-                if (!TeleportWarmups.isPending(uuid)) return;
+                if (!TeleportWarmups.isCurrent(uuid, pending)) return;
                 if (last) {
-                    TeleportWarmups.clear(uuid);
+                    TeleportWarmups.clear(uuid, pending);
                     completeTeleport(sender, uuid, target, cost, symbol);
                 } else {
                     MESSAGEUTILS.sendLang(sender, "teleport.countdown", Map.of("%seconds%", String.valueOf(secondsLeft)));
                 }
-            }, () -> TeleportWarmups.clear(uuid), second * 20L);
+            }, () -> TeleportWarmups.clear(uuid, pending), second * 20L);
         }
     }
 
@@ -99,14 +100,20 @@ public enum Teleport {
                 ));
                 return;
             }
-            MESSAGEUTILS.sendLang(sender, "teleport.cost-charged", Map.of("%cost%", EconomyHook.format(cost, symbol)));
         }
 
-        if (!sender.teleport(target)) {
+        boolean teleported = false;
+        try {
+            teleported = sender.teleport(target);
+        } finally {
+            if (!teleported && cost > 0) EconomyHook.refund(sender, cost);
+        }
+        if (!teleported) {
             MESSAGEUTILS.sendLang(sender, "teleport.cancelled");
             return;
         }
 
+        if (cost > 0) MESSAGEUTILS.sendLang(sender, "teleport.cost-charged", Map.of("%cost%", EconomyHook.format(cost, symbol)));
         TeleportWarmups.markUsed(uuid);
         MESSAGEUTILS.sendLang(sender, "teleport.warmup-complete");
     }

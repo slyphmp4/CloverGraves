@@ -89,7 +89,7 @@ public class PlayerInteractListener implements Listener {
         double halfWidth = settings.interactionHitboxWidth() / 2.0;
         double height = settings.interactionHitboxHeight();
 
-        for (Grave grave : SpawnedGraves.getGraves()) {
+        for (Grave grave : SpawnedGraves.getNearbyGraves(eye, maxDistance + halfWidth)) {
             if (grave.isRemoved()) continue;
             Location graveLocation = grave.getLocation();
             if (!player.getWorld().equals(graveLocation.getWorld())) continue;

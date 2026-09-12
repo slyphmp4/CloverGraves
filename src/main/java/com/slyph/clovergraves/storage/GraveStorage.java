@@ -49,5 +49,10 @@ public interface GraveStorage {
      */
     boolean claimForRestore(long historyId);
 
+    /** Releases a claim if construction failed before the restored grave became active. */
+    default void releaseRestoreClaim(long historyId) {
+        throw new UnsupportedOperationException("Restore claim rollback is not supported");
+    }
+
     void close();
 }

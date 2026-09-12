@@ -27,17 +27,16 @@ public final class StorageMigration {
         List<GraveRecord> records = source.loadAll();
         if (records.isEmpty()) return;
 
-        int migrated = 0;
-        for (GraveRecord record : records) {
-            try {
-                target.save(record.withId(-1));
-                migrated++;
-            } catch (Exception ex) {
-                CloverLogger.error("failed to migrate one grave from data.json - it will be skipped", ex);
+        try {
+            List<Long> ids = target.saveAll(records.stream().map(record -> record.withId(-1)).toList());
+            if (ids.size() != records.size() || ids.stream().anyMatch(id -> id == null || id <= 0)) {
+                throw new IllegalStateException("storage did not confirm every migrated grave");
             }
+        } catch (RuntimeException ex) {
+            throw new IllegalStateException("grave migration failed; data.json was left untouched", ex);
         }
 
-        CloverLogger.info("migrated {}/{} grave(s) from data.json into the database", migrated, records.size());
+        CloverLogger.info("migrated {} grave(s) from data.json into the database", records.size());
 
         try {
             Path renamed = legacy.toPath().resolveSibling("data.json.migrated");

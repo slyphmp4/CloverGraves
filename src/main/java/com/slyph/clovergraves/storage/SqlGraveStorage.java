@@ -71,6 +71,9 @@ public class SqlGraveStorage implements GraveStorage {
 
     @NotNull
     private static ConnectionProvider providerFor(@NotNull JdbcConfig config, @NotNull JdbcPoolConfig poolConfig) {
+        if (!config.tablePrefix().matches("[A-Za-z0-9_]*")) {
+            throw new IllegalArgumentException("storage.table-prefix may contain only letters, numbers and underscores");
+        }
         if (config.type() != JdbcConfig.Type.MYSQL) {
             return new ConnectionProvider() {
                 @Override
@@ -158,7 +161,7 @@ public class SqlGraveStorage implements GraveStorage {
         try {
             statement.executeUpdate(sql);
         } catch (SQLException ex) {
-            if (config.type() != JdbcConfig.Type.MYSQL) throw ex;
+            if (config.type() != JdbcConfig.Type.MYSQL || ex.getErrorCode() != 1061) throw ex;
         }
     }
 
@@ -172,7 +175,7 @@ public class SqlGraveStorage implements GraveStorage {
         try (Connection c = open(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) result.add(readLiveRecord(rs));
         } catch (SQLException ex) {
-            CloverLogger.error("failed to load graves from the database", ex);
+            throw new IllegalStateException("failed to load graves from the database", ex);
         }
         return result;
     }
@@ -282,7 +285,7 @@ public class SqlGraveStorage implements GraveStorage {
                 c.setAutoCommit(originalAutoCommit);
             }
         } catch (SQLException ex) {
-            CloverLogger.error("failed to remove/archive grave {} in the database", id, ex);
+            throw new IllegalStateException("failed to remove/archive grave " + id + " in the database", ex);
         }
     }
 
@@ -389,6 +392,17 @@ public class SqlGraveStorage implements GraveStorage {
         } catch (SQLException ex) {
             CloverLogger.error("failed to claim grave history entry {} for restore", historyId, ex);
             return false;
+        }
+    }
+
+    @Override
+    public void releaseRestoreClaim(long historyId) {
+        String sql = "UPDATE " + history() + " SET restored = FALSE WHERE id = ? AND restored = TRUE";
+        try (Connection c = open(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setLong(1, historyId);
+            ps.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("failed to release restore claim " + historyId, ex);
         }
     }
 

@@ -72,6 +72,7 @@ public class Grave {
     private ArmorStand entity;
     private GraveHologram hologram;
     private EndReason pendingRemovalReason;
+    private volatile EndReason removalReason;
     private long lastHologramUpdateAt;
     private volatile long storageId = -1;
     private volatile long lastPersistedVersion = -1;
@@ -102,10 +103,6 @@ public class Grave {
         contents = new GraveContents(location, title, filtered, storedXP);
         holder = new GraveInventoryHolder(this);
 
-        if (!overflow.isEmpty() && isChunkLoaded()) {
-            for (ItemStack item : overflow) location.getWorld().dropItem(location.clone(), item);
-        }
-
         Player onlinePlayer = offlinePlayer.getPlayer();
         if (onlinePlayer != null && LANG.getBoolean("death-message.enabled", false)) {
             MESSAGEUTILS.sendLang(onlinePlayer, "death-message.message", Map.of(
@@ -117,7 +114,15 @@ public class Grave {
         }
 
         contents.refreshSnapshot();
-        spawnVisuals();
+        try {
+            spawnVisuals();
+        } catch (RuntimeException ex) {
+            despawnVisuals();
+            throw ex;
+        }
+        if (!overflow.isEmpty() && isChunkLoaded()) {
+            for (ItemStack item : overflow) location.getWorld().dropItem(location.clone(), item);
+        }
     }
 
     public boolean isChunkLoaded() {
@@ -149,6 +154,7 @@ public class Grave {
         World world = Objects.requireNonNull(location.getWorld(), "grave world");
         Location headLocation = location.clone().add(0, 1 + CONFIG.getFloat("head-height", -1.2f), 0);
         ArmorStand created = (ArmorStand) world.spawnEntity(headLocation, EntityType.ARMOR_STAND);
+        entity = created; // Keep a cleanup handle if marker configuration fails.
         created.setVisible(false);
         created.setSmall(true);
         created.setBasePlate(false);
@@ -287,6 +293,8 @@ public class Grave {
     }
 
     private void instantPickup(@NotNull Player opener, @NotNull GraveSettings settings) {
+        syncFromView(opener);
+        if (removed.get()) return;
         transferXP(opener);
 
         PlayerInventory inventory = opener.getInventory();
@@ -294,8 +302,9 @@ public class Grave {
         boolean changed = false;
 
         for (int i = 0; i < snapshot.length; i++) {
-            ItemStack item = snapshot[i];
-            if (item == null || item.getType().isAir()) continue;
+            ItemStack stored = snapshot[i];
+            if (stored == null || stored.getType().isAir()) continue;
+            ItemStack item = stored.clone(); // addItem may mutate the argument's amount.
 
             if (settings.autoEquipArmor()) {
                 Material material = item.getType();
@@ -424,11 +433,15 @@ public class Grave {
 
         Runnable action = () -> {
             if (removed.get()) return;
+            contents.syncFromView();
             if (!isChunkLoaded() && requiresLoadedRemoval()) {
                 if (pendingRemovalReason == null) pendingRemovalReason = reason;
                 return;
             }
-            if (!removed.compareAndSet(false, true)) return;
+            synchronized (this) {
+                if (!removed.compareAndSet(false, true)) return;
+                removalReason = reason;
+            }
 
             pendingRemovalReason = null;
             SpawnedGraves.removeGrave(this, reason);
@@ -443,6 +456,11 @@ public class Grave {
     private boolean requiresLoadedRemoval() {
         GraveSettings settings = GraveSettings.current();
         return contents.storedXP() > 0 || settings.dropItems() && contents.countItems() > 0;
+    }
+
+    @Nullable
+    public EndReason removalReason() {
+        return removalReason;
     }
 
     public void removeInventory() {
@@ -472,8 +490,7 @@ public class Grave {
     }
 
     private void closeFor(@NotNull HumanEntity viewer) {
-        CloverScheduler.get().run(viewer, task -> viewer.closeInventory(), () -> {
-        });
+        if (viewer.getOpenInventory().getTopInventory() == contents.viewIfOpen()) viewer.closeInventory();
     }
 
     @NotNull

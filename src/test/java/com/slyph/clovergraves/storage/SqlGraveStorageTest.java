@@ -15,6 +15,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SqlGraveStorageTest {
     private String jdbcUrl;
@@ -160,5 +161,38 @@ class SqlGraveStorageTest {
         storage.remove(idA, EndReason.EXPIRED);
         assertEquals(1, storage.history(ownerA, 10).size());
         assertTrue(storage.history(ownerB, 10).isEmpty());
+    }
+
+    @Test
+    void failedArchiveRollsBackAndReportsFailureForRetry() throws Exception {
+        long id = storage.save(newRecord(UUID.randomUUID()));
+        try (Connection connection = openConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("DROP TABLE axgraves_grave_history");
+        }
+        assertThrows(IllegalStateException.class, () -> storage.remove(id, EndReason.LOOTED));
+        assertEquals(id, storage.loadAll().getFirst().id());
+        storage.init();
+        storage.remove(id, EndReason.LOOTED);
+        assertTrue(storage.loadAll().isEmpty());
+    }
+
+    @Test
+    void failedLoadIsNotReportedAsAnEmptyDatabase() throws Exception {
+        try (Connection connection = openConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("DROP TABLE axgraves_graves");
+        }
+        assertThrows(IllegalStateException.class, storage::loadAll);
+    }
+
+    @Test
+    void failedRestoreCanReleaseItsClaimAndBeRetried() {
+        UUID owner = UUID.randomUUID();
+        storage.remove(storage.save(newRecord(owner)), EndReason.EXPIRED);
+        long historyId = storage.history(owner, 1).getFirst().id();
+        assertTrue(storage.claimForRestore(historyId));
+        storage.releaseRestoreClaim(historyId);
+        assertFalse(storage.historyEntry(historyId).orElseThrow().restored());
+        assertTrue(storage.claimForRestore(historyId));
+        assertFalse(storage.claimForRestore(historyId));
     }
 }

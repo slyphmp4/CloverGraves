@@ -155,10 +155,18 @@ public final class AxGraves extends JavaPlugin {
     }
 
     private void bootstrapStorage(@NotNull StorageSettings settings) {
-        GraveStorage storage = createStorage(settings);
-        List<GraveRecord> records = settings.saveGravesEnabled()
-                ? new ArrayList<>(storage.loadAll())
-                : new ArrayList<>();
+        GraveStorage storage = null;
+        List<GraveRecord> records;
+        try {
+            storage = createStorage(settings);
+            List<GraveRecord> loaded = storage.loadAll();
+            records = settings.saveGravesEnabled() ? new ArrayList<>(loaded) : new ArrayList<>();
+        } catch (RuntimeException ex) {
+            if (storage != null) storage.close();
+            CloverLogger.error("grave storage could not be loaded; disabling CloverGraves to protect saved data", ex);
+            if (!shuttingDown) CloverScheduler.get().run(() -> getServer().getPluginManager().disablePlugin(this));
+            return;
+        }
         records.sort(Comparator.comparingLong(GraveRecord::createdAt));
 
         SpawnedGraves.setStorage(storage);
@@ -172,13 +180,14 @@ public final class AxGraves extends JavaPlugin {
 
     @NotNull
     private GraveStorage createStorage(@NotNull StorageSettings settings) {
+        SqlGraveStorage sql = null;
         try {
             JdbcConfig jdbc = switch (settings.type()) {
                 case "SQLITE" -> sqliteConfig(settings.tablePrefix());
                 case "MYSQL" -> mysqlConfig(settings);
                 default -> h2Config(settings.tablePrefix());
             };
-            SqlGraveStorage sql = new SqlGraveStorage(
+            sql = new SqlGraveStorage(
                     jdbc,
                     settings.pool(),
                     settings.historyEnabled(),
@@ -189,6 +198,7 @@ public final class AxGraves extends JavaPlugin {
             StorageMigration.migrateIfNeeded(getDataFolder(), sql);
             return sql;
         } catch (Throwable throwable) {
+            if (sql != null) sql.close();
             CloverLogger.error("failed to initialize {} storage; falling back to JSON", settings.type(), throwable);
             JsonGraveStorage json = new JsonGraveStorage(getDataFolder());
             json.init();
@@ -277,13 +287,19 @@ public final class AxGraves extends JavaPlugin {
             GraveStorage storage = SpawnedGraves.storage();
             if (storage == null) return;
 
-            if (persistRequested) SaveGraves.flushDirty();
             try {
-                storage.close();
+                if (persistRequested) SaveGraves.flushDirty();
+                else SaveGraves.flushRemovals(storage);
             } catch (RuntimeException ex) {
-                CloverLogger.error("failed to close grave storage", ex);
+                CloverLogger.error("failed to flush grave storage during shutdown", ex);
             } finally {
-                SpawnedGraves.setStorage(null);
+                try {
+                    storage.close();
+                } catch (RuntimeException ex) {
+                    CloverLogger.error("failed to close grave storage", ex);
+                } finally {
+                    SpawnedGraves.setStorage(null);
+                }
             }
         });
 

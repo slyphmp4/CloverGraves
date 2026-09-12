@@ -18,6 +18,7 @@ public final class EconomyHook {
 
     @Nullable
     private static Economy get() {
+        if (!Bukkit.getPluginManager().isPluginEnabled("Vault")) return null;
         if (!lookedUp) {
             lookedUp = true;
             RegisteredServiceProvider<Economy> provider = Bukkit.getServicesManager().getRegistration(Economy.class);
@@ -52,6 +53,16 @@ public final class EconomyHook {
     public static double balance(@NotNull OfflinePlayer player) {
         Economy provider = get();
         return provider == null ? 0 : provider.getBalance(player);
+    }
+
+    public static void refund(@NotNull OfflinePlayer player, double amount) {
+        Economy provider = get();
+        if (provider == null) return; // No provider means withdraw() did not charge.
+        EconomyResponse response = provider.depositPlayer(player, amount);
+        if (!response.transactionSuccess()) {
+            CloverLogger.error("failed to refund {} to {} after a cancelled teleport: {}",
+                    amount, player.getUniqueId(), response.errorMessage);
+        }
     }
 
     @NotNull

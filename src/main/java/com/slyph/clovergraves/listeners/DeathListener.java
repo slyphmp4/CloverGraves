@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static com.slyph.clovergraves.AxGraves.CONFIG;
@@ -53,7 +54,7 @@ public class DeathListener implements Listener {
     public static void reload() {
         disabledWorlds = CONFIG.getStringList("disabled-worlds");
         blacklistedDeathCauses = CONFIG.getStringList("blacklisted-death-causes");
-        overrideKeepInventory = CONFIG.getBoolean("override-keep-inventory", true);
+        overrideKeepInventory = CONFIG.getBoolean("override-keep-inventory", false);
         storeItems = CONFIG.getBoolean("store-items", true);
         storeXP = CONFIG.getBoolean("store-xp", true);
         xpKeepPercentage = CONFIG.getFloat("xp-keep-percentage", 1f);
@@ -64,7 +65,7 @@ public class DeathListener implements Listener {
 
         EventPriority priority;
         try {
-            priority = EventPriority.valueOf(CONFIG.getString("death-listener-priority", "HIGHEST").toUpperCase());
+            priority = EventPriority.valueOf(CONFIG.getString("death-listener-priority", "HIGHEST").toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             CloverLogger.warn("invalid death-listener-priority; using HIGHEST");
             priority = EventPriority.HIGHEST;
@@ -99,6 +100,8 @@ public class DeathListener implements Listener {
         InventoryOrderSnapshot orderSnapshot = InventoryOrderSnapshot.capture(player.getInventory());
 
         List<ItemStack> drops = new ArrayList<>();
+        List<ItemStack> originalDrops = new ArrayList<>(event.getDrops());
+        ItemStack[] originalInventory = null;
         if (storeItems) {
             boolean store = false;
             if (!event.getKeepInventory()) {
@@ -106,7 +109,8 @@ public class DeathListener implements Listener {
                 drops = new ArrayList<>(event.getDrops());
             } else if (overrideKeepInventory) {
                 store = true;
-                drops = Arrays.asList(player.getInventory().getContents());
+                originalInventory = player.getInventory().getContents();
+                drops = Arrays.asList(originalInventory);
                 player.getInventory().clear();
             }
             if (store) event.getDrops().clear();
@@ -141,8 +145,10 @@ public class DeathListener implements Listener {
             SpawnedGraves.addGrave(grave);
         } catch (Exception ex) {
             CloverLogger.error("failed to create a grave for {}; restoring captured items and xp", player.getName(), ex);
-            restoreOnFailure(player, drops);
-            if (xpCaptured) {
+            event.getDrops().clear();
+            event.getDrops().addAll(originalDrops);
+            if (originalInventory != null) player.getInventory().setContents(originalInventory);
+            if (storeXP) {
                 restoreExperienceEvent(
                         event,
                         originalDroppedExp,
@@ -222,15 +228,6 @@ public class DeathListener implements Listener {
         player.setTotalExperience(0);
         player.setLevel(0);
         player.setExp(0f);
-    }
-
-    private static void restoreOnFailure(Player player, List<ItemStack> drops) {
-        for (ItemStack item : drops) {
-            if (item == null || item.getType().isAir()) continue;
-            for (ItemStack extra : player.getInventory().addItem(item).values()) {
-                player.getWorld().dropItem(player.getLocation(), extra);
-            }
-        }
     }
 
     private static void restoreExperienceEvent(

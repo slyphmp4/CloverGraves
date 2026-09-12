@@ -40,7 +40,7 @@ public final class SafeLocationFinder {
 
         probes++;
         if (isSafeColumnSpot(probe, x, startY, z, settings)) {
-            return new Result(x, startY, z, false, true, probes);
+            return new Result(x, startY, z, startY != y, true, probes);
         }
 
         // vertical scan at the same x/z first - closest to where the player actually died.

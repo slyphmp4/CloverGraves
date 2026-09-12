@@ -8,6 +8,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
+import java.util.ArrayList;
+import org.bukkit.Location;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -25,7 +27,6 @@ public class SpawnedGraves {
     private static final Map<UUID, Grave> byEntity = new ConcurrentHashMap<>();
     private static final Map<UUID, ConcurrentLinkedDeque<Grave>> byOwner = new ConcurrentHashMap<>();
     private static final Map<ChunkKey, Set<Grave>> byChunk = new ConcurrentHashMap<>();
-    private static final Map<Grave, EndReason> unsavedRemovalTombstones = new ConcurrentHashMap<>();
     private static final Queue<PendingRemoval> pendingRemovals = new ConcurrentLinkedQueue<>();
 
     private static volatile GraveStorage storage;
@@ -86,14 +87,16 @@ public class SpawnedGraves {
 
         if (grave.storageId() > 0) {
             pendingRemovals.add(new PendingRemoval(grave.storageId(), reason));
-        } else if (storage != null) {
-            unsavedRemovalTombstones.put(grave, reason);
         }
     }
 
     @Nullable
     public static EndReason consumeUnsavedRemoval(@NotNull Grave grave) {
-        return unsavedRemovalTombstones.remove(grave);
+        return grave.removalReason();
+    }
+
+    public static void retryRemoval(@NotNull PendingRemoval removal) {
+        pendingRemovals.add(removal);
     }
 
     static void bindEntity(@NotNull Grave grave) {
@@ -136,6 +139,25 @@ public class SpawnedGraves {
     public static List<Grave> getGraves(@NotNull ChunkKey chunkKey) {
         Set<Grave> chunkGraves = byChunk.get(chunkKey);
         return chunkGraves == null ? List.of() : List.copyOf(chunkGraves);
+    }
+
+    @NotNull
+    public static Collection<Grave> getNearbyGraves(@NotNull Location center, double radius) {
+        int minX = (int) Math.floor((center.getX() - radius) / 16);
+        int maxX = (int) Math.floor((center.getX() + radius) / 16);
+        int minZ = (int) Math.floor((center.getZ() - radius) / 16);
+        int maxZ = (int) Math.floor((center.getZ() + radius) / 16);
+        // Preserve support for unusually large configured radii without an enormous chunk loop.
+        if (!Double.isFinite(radius) || (long) maxX - minX > 32 || (long) maxZ - minZ > 32) return getGraves();
+        List<Grave> result = new ArrayList<>();
+        UUID world = center.getWorld().getUID();
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                Set<Grave> entries = byChunk.get(new ChunkKey(world, x, z));
+                if (entries != null) result.addAll(entries);
+            }
+        }
+        return result;
     }
 
     @Nullable

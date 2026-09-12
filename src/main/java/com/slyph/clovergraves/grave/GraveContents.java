@@ -11,6 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class GraveContents {
@@ -39,7 +40,7 @@ public final class GraveContents {
     public Inventory openFor(@NotNull GraveInventoryHolder holder, int rows) {
         assertOwned();
         if (view == null) {
-            view = Bukkit.createInventory(holder, rows * 9, title);
+            view = Bukkit.createInventory(holder, rows * 9, LegacyComponentSerializer.legacySection().deserialize(title));
             holder.bind(view);
             view.setContents(items);
         }
@@ -58,14 +59,17 @@ public final class GraveContents {
         ItemStack[] next = view.getContents();
         if (sameContents(items, next)) return false;
 
-        items = next;
+        items = copyItems(next);
         markChanged();
         return true;
     }
 
     public void closeViewIfEmpty() {
         assertOwned();
-        if (view != null && view.getViewers().isEmpty()) view = null;
+        if (view != null && view.getViewers().isEmpty()) {
+            syncFromView();
+            view = null;
+        }
     }
 
     @NotNull
@@ -77,7 +81,7 @@ public final class GraveContents {
         assertOwned();
         if (sameContents(items, newItems)) return false;
 
-        items = newItems.clone();
+        items = copyItems(newItems);
         if (view != null) view.setContents(items);
         markChanged();
         return true;
@@ -147,6 +151,14 @@ public final class GraveContents {
             if (!sameItem(left[i], right[i])) return false;
         }
         return true;
+    }
+
+    private static ItemStack[] copyItems(ItemStack[] source) {
+        ItemStack[] copy = source.clone();
+        for (int i = 0; i < copy.length; i++) {
+            if (copy[i] != null) copy[i] = copy[i].clone();
+        }
+        return copy;
     }
 
     private boolean sameItem(@Nullable ItemStack left, @Nullable ItemStack right) {

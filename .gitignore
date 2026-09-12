@@ -112,3 +112,8 @@ buildNumber.properties
 
 # Common working directory
 run/
+
+# Gradle outputs and local audit backups
+.gradle/
+build/
+.audit/

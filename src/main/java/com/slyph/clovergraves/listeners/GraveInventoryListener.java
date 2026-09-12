@@ -65,10 +65,8 @@ public class GraveInventoryListener implements Listener {
         if (grave == null) return;
 
         Player looter = event.getPlayer() instanceof Player player ? player : null;
-        CloverScheduler.get().runAt(grave.getLocation(), () -> {
-            grave.syncFromView(looter);
-            grave.contents().closeViewIfEmpty();
-        });
+        grave.syncFromView(looter);
+        grave.contents().closeViewIfEmpty();
     }
 
     private void syncSoon(@NotNull Grave grave, @Nullable Player looter) {

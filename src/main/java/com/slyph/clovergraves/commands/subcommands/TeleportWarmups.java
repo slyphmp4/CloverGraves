@@ -24,7 +24,17 @@ public final class TeleportWarmups {
     private static final Map<UUID, Long> LAST_USE = new ConcurrentHashMap<>();
 
     public static void startPending(@NotNull UUID uuid, @NotNull Location origin) {
-        PENDING.put(uuid, new Pending(origin));
+        PENDING.put(uuid, new Pending(origin.clone()));
+    }
+
+    public static boolean isCurrent(@NotNull UUID uuid, @NotNull Pending pending) {
+        return PENDING.get(uuid) == pending;
+    }
+
+    public static boolean clear(@NotNull UUID uuid, @NotNull Pending pending) {
+        // Pending is a record: equality by origin would confuse two attempts at the same spot.
+        if (!isCurrent(uuid, pending)) return false;
+        return PENDING.remove(uuid, pending);
     }
 
     @Nullable

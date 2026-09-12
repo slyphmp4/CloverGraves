@@ -3,6 +3,8 @@ package com.slyph.clovergraves.commands.subcommands;
 import com.slyph.clovergraves.grave.Grave;
 import com.slyph.clovergraves.grave.SpawnedGraves;
 import com.slyph.clovergraves.schedulers.CloverScheduler;
+import com.slyph.clovergraves.schedulers.SaveGraves;
+import com.slyph.clovergraves.AxGraves;
 import com.slyph.clovergraves.storage.GraveRecord;
 import com.slyph.clovergraves.storage.GraveStorage;
 import com.slyph.clovergraves.storage.ItemSerialization;
@@ -63,18 +65,33 @@ public enum Restore {
                     MESSAGEUTILS.sendLang(sender, "restore.already-restored", Map.of("%id%", String.valueOf(id)));
                     return;
                 }
-                spawn(sender, player, displayName, id, entry, location);
+                spawn(sender, player, displayName, id, storage, entry, location);
             });
         });
     }
 
     private void spawn(CommandSender sender, OfflinePlayer player, String displayName, long id,
-                       GraveRecord entry, Location location) {
+                       GraveStorage storage, GraveRecord entry, Location location) {
+        Grave grave;
         try {
             ItemStack[] items = ItemSerialization.deserialize(entry.items());
-            Grave grave = new Grave(location, player, Arrays.asList(items), entry.storedXP(),
+            grave = new Grave(location, player, Arrays.asList(items), entry.storedXP(),
                     System.currentTimeMillis(), InventoryOrderSnapshot.EMPTY);
+        } catch (Exception ex) {
+            CloverLogger.error("failed to construct restored grave {}", id, ex);
+            AxGraves.EXECUTOR.execute(() -> {
+                try {
+                    storage.releaseRestoreClaim(id);
+                } catch (RuntimeException rollback) {
+                    CloverLogger.error("failed to release history claim {}; manual recovery may be needed", id, rollback);
+                }
+            });
+            MESSAGEUTILS.sendLang(sender, "restore.failed", Map.of("%id%", String.valueOf(id)));
+            return;
+        }
+        try {
             SpawnedGraves.addGrave(grave);
+            SaveGraves.saveNow(grave);
 
             MESSAGEUTILS.sendLang(sender, "restore.success", Map.of(
                     "%id%", String.valueOf(id),

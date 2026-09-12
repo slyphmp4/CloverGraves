@@ -97,6 +97,9 @@ public final class Commands implements CommandExecutor, TabCompleter {
             double x = Double.parseDouble(args[offset + 1]);
             double y = Double.parseDouble(args[offset + 2]);
             double z = Double.parseDouble(args[offset + 3]);
+            if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)) {
+                throw new NumberFormatException("Non-finite coordinates");
+            }
             Teleport.INSTANCE.execute(player, world, x, y, z);
         } catch (NumberFormatException ex) {
             MESSAGEUTILS.sendLang(sender, "commands.invalid-value", java.util.Map.of("%value%", "coordinates"));
