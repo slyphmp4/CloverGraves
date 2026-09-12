@@ -25,6 +25,7 @@ public class SpawnedGraves {
     private static final Map<UUID, Grave> byEntity = new ConcurrentHashMap<>();
     private static final Map<UUID, ConcurrentLinkedDeque<Grave>> byOwner = new ConcurrentHashMap<>();
     private static final Map<ChunkKey, Set<Grave>> byChunk = new ConcurrentHashMap<>();
+    private static final Map<Grave, EndReason> unsavedRemovalTombstones = new ConcurrentHashMap<>();
     private static final Queue<PendingRemoval> pendingRemovals = new ConcurrentLinkedQueue<>();
 
     private static volatile GraveStorage storage;
@@ -85,7 +86,14 @@ public class SpawnedGraves {
 
         if (grave.storageId() > 0) {
             pendingRemovals.add(new PendingRemoval(grave.storageId(), reason));
+        } else if (storage != null) {
+            unsavedRemovalTombstones.put(grave, reason);
         }
+    }
+
+    @Nullable
+    public static EndReason consumeUnsavedRemoval(@NotNull Grave grave) {
+        return unsavedRemovalTombstones.remove(grave);
     }
 
     static void bindEntity(@NotNull Grave grave) {
