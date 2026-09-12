@@ -5,7 +5,6 @@ import com.slyph.clovergraves.grave.GraveSnapshot;
 import com.slyph.clovergraves.grave.SpawnedGraves;
 import com.slyph.clovergraves.storage.GraveRecord;
 import com.slyph.clovergraves.storage.GraveStorage;
-import com.slyph.clovergraves.storage.LocationCodec;
 import com.slyph.clovergraves.utils.CloverLogger;
 import org.jetbrains.annotations.NotNull;
 
@@ -19,9 +18,11 @@ import static com.slyph.clovergraves.AxGraves.EXECUTOR;
 
 public class SaveGraves {
     private static ScheduledFuture<?> future;
+    private static volatile int dataVersion = -1;
 
     public static void start() {
         if (future != null) future.cancel(false);
+        dataVersion = resolveDataVersion();
 
         int seconds = CONFIG.getInt("storage.flush-interval-seconds", CONFIG.getInt("save-graves.auto-save-seconds", 30));
         if (seconds == -1) return;
@@ -30,7 +31,7 @@ public class SaveGraves {
         future = EXECUTOR.scheduleAtFixedRate(() -> {
             try {
                 flushDirty();
-            } catch (Exception ex) {
+            } catch (RuntimeException ex) {
                 CloverLogger.error("failed to save graves", ex);
             }
         }, seconds, seconds, TimeUnit.SECONDS);
@@ -58,7 +59,6 @@ public class SaveGraves {
 
         flushRemovals(storage);
 
-        int dataVersion = currentDataVersion();
         List<PersistRequest> requests = new ArrayList<>();
         List<GraveRecord> records = new ArrayList<>();
 
@@ -67,7 +67,7 @@ public class SaveGraves {
             if (snapshot.version() == grave.lastPersistedVersion()) continue;
 
             requests.add(new PersistRequest(grave, snapshot));
-            records.add(toRecord(grave, snapshot, dataVersion));
+            records.add(toRecord(grave, snapshot));
         }
 
         if (records.isEmpty()) return;
@@ -87,7 +87,7 @@ public class SaveGraves {
                 request.grave().assignStorageId(assignedId);
                 request.grave().markPersisted(request.snapshot().version());
             }
-        } catch (Exception ex) {
+        } catch (RuntimeException ex) {
             CloverLogger.error("failed to batch-save {} dirty grave(s)", records.size(), ex);
         }
     }
@@ -97,7 +97,7 @@ public class SaveGraves {
         while ((removal = SpawnedGraves.pollRemoval()) != null) {
             try {
                 storage.remove(removal.storageId(), removal.reason());
-            } catch (Exception ex) {
+            } catch (RuntimeException ex) {
                 CloverLogger.error("failed to remove grave {} from storage", removal.storageId(), ex);
             }
         }
@@ -105,23 +105,23 @@ public class SaveGraves {
 
     private static void persistOne(@NotNull Grave grave, @NotNull GraveSnapshot snapshot, @NotNull GraveStorage storage) {
         try {
-            long assignedId = storage.save(toRecord(grave, snapshot, currentDataVersion()));
+            long assignedId = storage.save(toRecord(grave, snapshot));
             if (assignedId <= 0) return;
 
             grave.assignStorageId(assignedId);
             grave.markPersisted(snapshot.version());
-        } catch (Exception ex) {
+        } catch (RuntimeException ex) {
             CloverLogger.error("failed to save a grave to storage", ex);
         }
     }
 
     @NotNull
-    private static GraveRecord toRecord(@NotNull Grave grave, @NotNull GraveSnapshot snapshot, int dataVersion) {
+    private static GraveRecord toRecord(@NotNull Grave grave, @NotNull GraveSnapshot snapshot) {
         return new GraveRecord(
                 grave.storageId(),
                 grave.getPlayer().getUniqueId(),
                 grave.getPlayerName(),
-                LocationCodec.serialize(grave.getLocation()),
+                grave.getStorageLocation(),
                 snapshot.serializedItems(),
                 dataVersion,
                 snapshot.storedXP(),
@@ -131,7 +131,7 @@ public class SaveGraves {
         );
     }
 
-    private static int currentDataVersion() {
+    private static int resolveDataVersion() {
         try {
             return org.bukkit.Bukkit.getUnsafe().getDataVersion();
         } catch (Throwable ignored) {
