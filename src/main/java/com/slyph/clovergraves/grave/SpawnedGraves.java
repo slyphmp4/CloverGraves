@@ -24,6 +24,7 @@ public class SpawnedGraves {
     private static final Map<BlockKey, Grave> byBlock = new ConcurrentHashMap<>();
     private static final Map<UUID, Grave> byEntity = new ConcurrentHashMap<>();
     private static final Map<UUID, ConcurrentLinkedDeque<Grave>> byOwner = new ConcurrentHashMap<>();
+    private static final Map<ChunkKey, Set<Grave>> byChunk = new ConcurrentHashMap<>();
     private static final Queue<PendingRemoval> pendingRemovals = new ConcurrentLinkedQueue<>();
 
     private static volatile GraveStorage storage;
@@ -45,8 +46,9 @@ public class SpawnedGraves {
 
         graves.add(grave);
         byBlock.put(grave.getBlockKey(), grave);
-        if (grave.getEntity() != null) byEntity.put(grave.getEntity().getUniqueId(), grave);
         byOwner.computeIfAbsent(grave.getPlayer().getUniqueId(), ignored -> new ConcurrentLinkedDeque<>()).addLast(grave);
+        byChunk.computeIfAbsent(grave.getChunkKey(), ignored -> ConcurrentHashMap.newKeySet()).add(grave);
+        bindEntity(grave);
         GraveLifecycleService.get().register(grave);
     }
 
@@ -67,9 +69,9 @@ public class SpawnedGraves {
 
     public static void removeGrave(@NotNull Grave grave, @NotNull EndReason reason) {
         GraveLifecycleService.get().unregister(grave);
+        unbindEntity(grave);
         graves.remove(grave);
         byBlock.remove(grave.getBlockKey(), grave);
-        if (grave.getEntity() != null) byEntity.remove(grave.getEntity().getUniqueId(), grave);
 
         UUID owner = grave.getPlayer().getUniqueId();
         ConcurrentLinkedDeque<Grave> ownerGraves = byOwner.get(owner);
@@ -78,9 +80,25 @@ public class SpawnedGraves {
             if (ownerGraves.isEmpty()) byOwner.remove(owner, ownerGraves);
         }
 
+        Set<Grave> chunkGraves = byChunk.get(grave.getChunkKey());
+        if (chunkGraves != null) {
+            chunkGraves.remove(grave);
+            if (chunkGraves.isEmpty()) byChunk.remove(grave.getChunkKey(), chunkGraves);
+        }
+
         if (grave.storageId() > 0) {
             pendingRemovals.add(new PendingRemoval(grave.storageId(), reason));
         }
+    }
+
+    static void bindEntity(@NotNull Grave grave) {
+        if (!graves.contains(grave) || grave.getEntity() == null) return;
+        byEntity.put(grave.getEntity().getUniqueId(), grave);
+    }
+
+    static void unbindEntity(@NotNull Grave grave) {
+        if (grave.getEntity() == null) return;
+        byEntity.remove(grave.getEntity().getUniqueId(), grave);
     }
 
     @Nullable
@@ -107,6 +125,12 @@ public class SpawnedGraves {
     public static List<Grave> getGraves(@NotNull UUID owner) {
         ConcurrentLinkedDeque<Grave> ownerGraves = byOwner.get(owner);
         return ownerGraves == null ? List.of() : List.copyOf(ownerGraves);
+    }
+
+    @NotNull
+    public static List<Grave> getGraves(@NotNull ChunkKey chunkKey) {
+        Set<Grave> chunkGraves = byChunk.get(chunkKey);
+        return chunkGraves == null ? List.of() : List.copyOf(chunkGraves);
     }
 
     @Nullable
