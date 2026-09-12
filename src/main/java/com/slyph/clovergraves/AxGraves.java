@@ -9,6 +9,7 @@ import com.slyph.clovergraves.grave.GraveLifecycleService;
 import com.slyph.clovergraves.grave.SpawnedGraves;
 import com.slyph.clovergraves.hooks.placeholder.PlaceholderHook;
 import com.slyph.clovergraves.listeners.DeathListener;
+import com.slyph.clovergraves.listeners.GraveChunkListener;
 import com.slyph.clovergraves.listeners.GraveEntityInteractListener;
 import com.slyph.clovergraves.listeners.GraveInventoryListener;
 import com.slyph.clovergraves.listeners.PlayerInteractListener;
@@ -38,7 +39,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutionException;
@@ -103,13 +106,15 @@ public final class AxGraves extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new PlayerInteractListener(), this);
         getServer().getPluginManager().registerEvents(new GraveEntityInteractListener(), this);
         getServer().getPluginManager().registerEvents(new GraveInventoryListener(), this);
+        getServer().getPluginManager().registerEvents(new GraveChunkListener(), this);
         getServer().getPluginManager().registerEvents(new TeleportCancelListener(), this);
 
         CommandManager.load();
         PlaceholderHook.register();
 
         SpawnedGraves.setStorage(null);
-        EXECUTOR.execute(this::bootstrapStorage);
+        StorageSettings storageSettings = readStorageSettings();
+        EXECUTOR.execute(() -> bootstrapStorage(storageSettings));
         SaveGraves.start();
 
         UpdateNotifier.init(CONFIG);
@@ -127,11 +132,34 @@ public final class AxGraves extends JavaPlugin {
         }
     }
 
-    private void bootstrapStorage() {
-        GraveStorage storage = createStorage();
-        List<GraveRecord> records = CONFIG.getBoolean("save-graves.enabled", true)
-                ? storage.loadAll()
-                : List.of();
+    @NotNull
+    private StorageSettings readStorageSettings() {
+        return new StorageSettings(
+                CONFIG.getString("storage.type", "H2").trim().toUpperCase(Locale.ROOT),
+                CONFIG.getBoolean("save-graves.enabled", true),
+                CONFIG.getBoolean("history.enabled", true),
+                CONFIG.getInt("history.keep-per-player", 5),
+                CONFIG.getInt("history.keep-days", 14),
+                CONFIG.getString("storage.table-prefix", "axgraves_"),
+                CONFIG.getString("storage.mysql.address", "127.0.0.1"),
+                CONFIG.getInt("storage.mysql.port", 3306),
+                CONFIG.getString("storage.mysql.database", "axgraves"),
+                CONFIG.getString("storage.mysql.username", "root"),
+                CONFIG.getString("storage.mysql.password", ""),
+                new JdbcPoolConfig(
+                        CONFIG.getInt("storage.mysql.pool.maximum-pool-size", 4),
+                        CONFIG.getInt("storage.mysql.pool.minimum-idle", 1),
+                        CONFIG.getInt("storage.mysql.pool.connection-timeout-millis", 5_000)
+                )
+        );
+    }
+
+    private void bootstrapStorage(@NotNull StorageSettings settings) {
+        GraveStorage storage = createStorage(settings);
+        List<GraveRecord> records = settings.saveGravesEnabled()
+                ? new ArrayList<>(storage.loadAll())
+                : new ArrayList<>();
+        records.sort(Comparator.comparingLong(GraveRecord::createdAt));
 
         SpawnedGraves.setStorage(storage);
         if (shuttingDown || records.isEmpty()) return;
@@ -143,30 +171,25 @@ public final class AxGraves extends JavaPlugin {
     }
 
     @NotNull
-    private GraveStorage createStorage() {
-        String type = CONFIG.getString("storage.type", "H2").trim().toUpperCase(Locale.ROOT);
-        boolean historyEnabled = CONFIG.getBoolean("history.enabled", true);
-        int keepPerPlayer = CONFIG.getInt("history.keep-per-player", 5);
-        int keepDays = CONFIG.getInt("history.keep-days", 14);
-        String tablePrefix = CONFIG.getString("storage.table-prefix", "axgraves_");
-
+    private GraveStorage createStorage(@NotNull StorageSettings settings) {
         try {
-            JdbcConfig jdbc = switch (type) {
-                case "SQLITE" -> sqliteConfig(tablePrefix);
-                case "MYSQL" -> mysqlConfig(tablePrefix);
-                default -> h2Config(tablePrefix);
+            JdbcConfig jdbc = switch (settings.type()) {
+                case "SQLITE" -> sqliteConfig(settings.tablePrefix());
+                case "MYSQL" -> mysqlConfig(settings);
+                default -> h2Config(settings.tablePrefix());
             };
-            JdbcPoolConfig pool = new JdbcPoolConfig(
-                    CONFIG.getInt("storage.mysql.pool.maximum-pool-size", 4),
-                    CONFIG.getInt("storage.mysql.pool.minimum-idle", 1),
-                    CONFIG.getInt("storage.mysql.pool.connection-timeout-millis", 5_000)
+            SqlGraveStorage sql = new SqlGraveStorage(
+                    jdbc,
+                    settings.pool(),
+                    settings.historyEnabled(),
+                    settings.keepPerPlayer(),
+                    settings.keepDays()
             );
-            SqlGraveStorage sql = new SqlGraveStorage(jdbc, pool, historyEnabled, keepPerPlayer, keepDays);
             sql.init();
             StorageMigration.migrateIfNeeded(getDataFolder(), sql);
             return sql;
         } catch (Throwable throwable) {
-            CloverLogger.error("failed to initialize {} storage; falling back to JSON", type, throwable);
+            CloverLogger.error("failed to initialize {} storage; falling back to JSON", settings.type(), throwable);
             JsonGraveStorage json = new JsonGraveStorage(getDataFolder());
             json.init();
             return json;
@@ -187,15 +210,16 @@ public final class AxGraves extends JavaPlugin {
     }
 
     @NotNull
-    private JdbcConfig mysqlConfig(String tablePrefix) {
-        String address = CONFIG.getString("storage.mysql.address", "127.0.0.1");
-        int port = CONFIG.getInt("storage.mysql.port", 3306);
-        String database = CONFIG.getString("storage.mysql.database", "axgraves");
-        String username = CONFIG.getString("storage.mysql.username", "root");
-        String password = CONFIG.getString("storage.mysql.password", "");
-        String url = "jdbc:mysql://" + address + ':' + port + '/' + database
+    private JdbcConfig mysqlConfig(@NotNull StorageSettings settings) {
+        String url = "jdbc:mysql://" + settings.mysqlAddress() + ':' + settings.mysqlPort() + '/' + settings.mysqlDatabase()
                 + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
-        return new JdbcConfig(JdbcConfig.Type.MYSQL, url, username, password, tablePrefix);
+        return new JdbcConfig(
+                JdbcConfig.Type.MYSQL,
+                url,
+                settings.mysqlUsername(),
+                settings.mysqlPassword(),
+                settings.tablePrefix()
+        );
     }
 
     private void restoreGrave(@NotNull GraveRecord record) {
@@ -237,8 +261,7 @@ public final class AxGraves extends JavaPlugin {
             } catch (RuntimeException ex) {
                 CloverLogger.error("failed to refresh a grave snapshot during shutdown", ex);
             }
-            if (grave.getEntity() != null) grave.getEntity().remove();
-            if (grave.getHologram() != null) grave.getHologram().remove();
+            grave.despawnVisuals();
         }
 
         GraveLifecycleService.get().shutdown();
@@ -282,5 +305,21 @@ public final class AxGraves extends JavaPlugin {
                 EXECUTOR.shutdownNow();
             }
         }
+    }
+
+    private record StorageSettings(
+            @NotNull String type,
+            boolean saveGravesEnabled,
+            boolean historyEnabled,
+            int keepPerPlayer,
+            int keepDays,
+            @NotNull String tablePrefix,
+            @NotNull String mysqlAddress,
+            int mysqlPort,
+            @NotNull String mysqlDatabase,
+            @NotNull String mysqlUsername,
+            @NotNull String mysqlPassword,
+            @NotNull JdbcPoolConfig pool
+    ) {
     }
 }
