@@ -5,6 +5,7 @@ import com.slyph.clovergraves.compat.CardboardCompatibilitySelfTest;
 import com.slyph.clovergraves.config.CloverConfig;
 import com.slyph.clovergraves.config.GraveSettings;
 import com.slyph.clovergraves.grave.Grave;
+import com.slyph.clovergraves.grave.GraveLifecycleService;
 import com.slyph.clovergraves.grave.SpawnedGraves;
 import com.slyph.clovergraves.hooks.placeholder.PlaceholderHook;
 import com.slyph.clovergraves.listeners.DeathListener;
@@ -75,6 +76,7 @@ public final class AxGraves extends JavaPlugin {
         MESSAGEUTILS = new MessageService(LANG, "prefix", CONFIG);
         debugMode = CONFIG.getBoolean("debug", false);
         GraveSettings.reload(CONFIG);
+        GraveLifecycleService.init();
 
         EXECUTOR = Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform()
                 .name("CloverGraves-Storage", 0)
@@ -208,6 +210,8 @@ public final class AxGraves extends JavaPlugin {
             if (grave.getEntity() != null) grave.getEntity().remove();
             if (grave.getHologram() != null) grave.getHologram().remove();
         }
+
+        GraveLifecycleService.get().shutdown();
 
         if (persist) SaveGraves.flushDirty();
         if (storage != null) {
