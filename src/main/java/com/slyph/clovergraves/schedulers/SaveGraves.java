@@ -9,6 +9,8 @@ import com.slyph.clovergraves.storage.LocationCodec;
 import com.slyph.clovergraves.utils.CloverLogger;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -54,6 +56,43 @@ public class SaveGraves {
         GraveStorage storage = SpawnedGraves.storage();
         if (storage == null) return;
 
+        flushRemovals(storage);
+
+        int dataVersion = currentDataVersion();
+        List<PersistRequest> requests = new ArrayList<>();
+        List<GraveRecord> records = new ArrayList<>();
+
+        for (Grave grave : SpawnedGraves.getGraves()) {
+            GraveSnapshot snapshot = grave.snapshot();
+            if (snapshot.version() == grave.lastPersistedVersion()) continue;
+
+            requests.add(new PersistRequest(grave, snapshot));
+            records.add(toRecord(grave, snapshot, dataVersion));
+        }
+
+        if (records.isEmpty()) return;
+
+        try {
+            List<Long> ids = storage.saveAll(records);
+            if (ids.size() != requests.size()) {
+                CloverLogger.error("storage returned {} ids for {} dirty graves; none were marked persisted", ids.size(), requests.size());
+                return;
+            }
+
+            for (int i = 0; i < requests.size(); i++) {
+                long assignedId = ids.get(i);
+                if (assignedId <= 0) continue;
+
+                PersistRequest request = requests.get(i);
+                request.grave().assignStorageId(assignedId);
+                request.grave().markPersisted(request.snapshot().version());
+            }
+        } catch (Exception ex) {
+            CloverLogger.error("failed to batch-save {} dirty grave(s)", records.size(), ex);
+        }
+    }
+
+    private static void flushRemovals(@NotNull GraveStorage storage) {
         SpawnedGraves.PendingRemoval removal;
         while ((removal = SpawnedGraves.pollRemoval()) != null) {
             try {
@@ -62,35 +101,34 @@ public class SaveGraves {
                 CloverLogger.error("failed to remove grave {} from storage", removal.storageId(), ex);
             }
         }
-
-        for (Grave grave : SpawnedGraves.getGraves()) {
-            GraveSnapshot snapshot = grave.snapshot();
-            if (snapshot.version() == grave.lastPersistedVersion()) continue;
-            persistOne(grave, snapshot, storage);
-        }
     }
 
     private static void persistOne(@NotNull Grave grave, @NotNull GraveSnapshot snapshot, @NotNull GraveStorage storage) {
         try {
-            GraveRecord record = new GraveRecord(
-                    grave.storageId(),
-                    grave.getPlayer().getUniqueId(),
-                    grave.getPlayerName(),
-                    LocationCodec.serialize(grave.getLocation()),
-                    snapshot.serializedItems(),
-                    currentDataVersion(),
-                    snapshot.storedXP(),
-                    grave.getSpawned(),
-                    null,
-                    null
-            );
+            long assignedId = storage.save(toRecord(grave, snapshot, currentDataVersion()));
+            if (assignedId <= 0) return;
 
-            long assignedId = storage.save(record);
             grave.assignStorageId(assignedId);
             grave.markPersisted(snapshot.version());
         } catch (Exception ex) {
             CloverLogger.error("failed to save a grave to storage", ex);
         }
+    }
+
+    @NotNull
+    private static GraveRecord toRecord(@NotNull Grave grave, @NotNull GraveSnapshot snapshot, int dataVersion) {
+        return new GraveRecord(
+                grave.storageId(),
+                grave.getPlayer().getUniqueId(),
+                grave.getPlayerName(),
+                LocationCodec.serialize(grave.getLocation()),
+                snapshot.serializedItems(),
+                dataVersion,
+                snapshot.storedXP(),
+                grave.getSpawned(),
+                null,
+                null
+        );
     }
 
     private static int currentDataVersion() {
@@ -99,5 +137,8 @@ public class SaveGraves {
         } catch (Throwable ignored) {
             return -1;
         }
+    }
+
+    private record PersistRequest(@NotNull Grave grave, @NotNull GraveSnapshot snapshot) {
     }
 }
