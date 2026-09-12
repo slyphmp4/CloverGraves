@@ -25,6 +25,11 @@ public class GraveInventoryListener implements Listener {
         boolean clickedTop = event.getRawSlot() >= 0 && event.getRawSlot() < topSize;
         InventoryAction action = event.getAction();
 
+        if (clickedTop && action == InventoryAction.CLONE_STACK) {
+            event.setCancelled(true);
+            return;
+        }
+
         boolean deposits = clickedTop && switch (action) {
             case PLACE_ALL, PLACE_ONE, PLACE_SOME, SWAP_WITH_CURSOR, HOTBAR_SWAP, HOTBAR_MOVE_AND_READD -> true;
             default -> false;
@@ -35,6 +40,9 @@ public class GraveInventoryListener implements Listener {
             event.setCancelled(true);
             return;
         }
+
+        boolean canChangeTop = clickedTop || action == InventoryAction.COLLECT_TO_CURSOR;
+        if (!canChangeTop) return;
 
         Player looter = event.getWhoClicked() instanceof Player player ? player : null;
         syncSoon(grave, looter);
@@ -48,11 +56,7 @@ public class GraveInventoryListener implements Listener {
         int topSize = event.getView().getTopInventory().getSize();
         if (event.getRawSlots().stream().anyMatch(slot -> slot >= 0 && slot < topSize)) {
             event.setCancelled(true);
-            return;
         }
-
-        Player looter = event.getWhoClicked() instanceof Player player ? player : null;
-        syncSoon(grave, looter);
     }
 
     @EventHandler
