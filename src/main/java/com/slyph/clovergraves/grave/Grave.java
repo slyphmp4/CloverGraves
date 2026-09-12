@@ -9,6 +9,7 @@ import com.slyph.clovergraves.grave.hologram.TextDisplayGraveHologram;
 import com.slyph.clovergraves.listeners.DeathListener;
 import com.slyph.clovergraves.schedulers.CloverScheduler;
 import com.slyph.clovergraves.storage.EndReason;
+import com.slyph.clovergraves.storage.LocationCodec;
 import com.slyph.clovergraves.utils.BlacklistUtils;
 import com.slyph.clovergraves.utils.ExperienceUtils;
 import com.slyph.clovergraves.utils.InventoryOrderSnapshot;
@@ -22,6 +23,7 @@ import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
+import org.bukkit.World;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.ExperienceOrb;
@@ -55,18 +57,21 @@ public class Grave {
 
     private final long spawned;
     private final Location location;
+    private final String storageLocation;
     private final BlockKey blockKey;
+    private final ChunkKey chunkKey;
     private final OfflinePlayer player;
     private final String playerName;
     private final int rows;
     private final GraveContents contents;
     private final GraveInventoryHolder holder;
-    private final ArmorStand entity;
     private final AtomicBoolean removed = new AtomicBoolean(false);
     private final Map<UUID, Long> lastProtectionNotice = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastInteractionAt = new ConcurrentHashMap<>();
 
+    private ArmorStand entity;
     private GraveHologram hologram;
+    private EndReason pendingRemovalReason;
     private long lastHologramUpdateAt;
     private volatile long storageId = -1;
     private volatile long lastPersistedVersion = -1;
@@ -86,7 +91,9 @@ public class Grave {
 
         location = LocationUtils.getCenterOf(loc, true, false);
         LocationUtils.clampLocation(location);
+        storageLocation = LocationCodec.serialize(location);
         blockKey = BlockKey.of(location);
+        chunkKey = ChunkKey.of(location);
         player = offlinePlayer;
         playerName = offlinePlayer.getName() == null ? LANG.getString("unknown-player", "???") : offlinePlayer.getName();
         spawned = date;
@@ -95,8 +102,8 @@ public class Grave {
         contents = new GraveContents(location, title, filtered, storedXP);
         holder = new GraveInventoryHolder(this);
 
-        for (ItemStack item : overflow) {
-            location.getWorld().dropItem(location.clone(), item);
+        if (!overflow.isEmpty() && isChunkLoaded()) {
+            for (ItemStack item : overflow) location.getWorld().dropItem(location.clone(), item);
         }
 
         Player onlinePlayer = offlinePlayer.getPlayer();
@@ -109,34 +116,77 @@ public class Grave {
             ));
         }
 
+        contents.refreshSnapshot();
+        spawnVisuals();
+    }
+
+    public boolean isChunkLoaded() {
+        World world = location.getWorld();
+        return world != null && world.isChunkLoaded(chunkKey.x(), chunkKey.z());
+    }
+
+    public void onChunkLoaded() {
+        if (removed.get()) return;
+
+        EndReason pending = pendingRemovalReason;
+        if (pending != null) {
+            pendingRemovalReason = null;
+            remove(pending);
+            if (removed.get()) return;
+        }
+
+        spawnVisuals();
+    }
+
+    public void spawnVisuals() {
+        if (removed.get() || !isChunkLoaded()) return;
+
+        if (entity == null || entity.isDead()) spawnMarker();
+        if (hologram == null || !hologram.isValid()) updateHologram();
+    }
+
+    private void spawnMarker() {
+        World world = Objects.requireNonNull(location.getWorld(), "grave world");
         Location headLocation = location.clone().add(0, 1 + CONFIG.getFloat("head-height", -1.2f), 0);
-        entity = (ArmorStand) location.getWorld().spawnEntity(headLocation, EntityType.ARMOR_STAND);
-        entity.setVisible(false);
-        entity.setSmall(true);
-        entity.setBasePlate(false);
-        entity.setGravity(false);
-        entity.setInvulnerable(true);
-        entity.setSilent(true);
-        entity.setPersistent(false);
-        entity.setCollidable(false);
-        entity.setCanPickupItems(false);
-        if (entity.getEquipment() != null) entity.getEquipment().setHelmet(Utils.getPlayerHead(offlinePlayer));
-        entity.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.ADDING_OR_CHANGING);
-        entity.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
+        ArmorStand created = (ArmorStand) world.spawnEntity(headLocation, EntityType.ARMOR_STAND);
+        created.setVisible(false);
+        created.setSmall(true);
+        created.setBasePlate(false);
+        created.setGravity(false);
+        created.setInvulnerable(true);
+        created.setSilent(true);
+        created.setPersistent(false);
+        created.setCollidable(false);
+        created.setCanPickupItems(false);
+        if (created.getEquipment() != null) created.getEquipment().setHelmet(Utils.getPlayerHead(player));
+        created.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.ADDING_OR_CHANGING);
+        created.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
 
         float yaw = CONFIG.getBoolean("rotate-head-360", true)
                 ? location.getYaw()
                 : LocationUtils.getNearestDirection(location.getYaw());
-        entity.setRotation(yaw, 0f);
+        created.setRotation(yaw, 0f);
 
-        contents.refreshSnapshot();
-        updateHologram();
+        entity = created;
+        SpawnedGraves.bindEntity(this);
+    }
+
+    public void despawnVisuals() {
+        closeAllViewers();
+        SpawnedGraves.unbindEntity(this);
+
+        if (entity != null && !entity.isDead()) entity.remove();
+        entity = null;
+
+        if (hologram != null) hologram.remove();
+        hologram = null;
     }
 
     void rotateMarker(@NotNull GraveSettings settings) {
-        if (removed.get() || entity.isDead()) return;
-        Location current = entity.getLocation();
-        entity.setRotation(current.getYaw() + settings.autoRotationSpeed(), current.getPitch());
+        ArmorStand marker = entity;
+        if (removed.get() || marker == null || marker.isDead()) return;
+        Location current = marker.getLocation();
+        marker.setRotation(current.getYaw() + settings.autoRotationSpeed(), current.getPitch());
     }
 
     void maintainOpenView(@NotNull GraveSettings settings) {
@@ -281,7 +331,6 @@ public class Grave {
         }
 
         if (changed) contents.setItems(snapshot);
-        contents.refreshSnapshot();
 
         if (contents.snapshot().empty()) {
             remove(EndReason.LOOTED);
@@ -294,11 +343,11 @@ public class Grave {
         if (removed.get()) return;
 
         int before = contents.countItems();
-        contents.syncFromView();
-        int after = contents.countItems();
+        boolean changed = contents.syncFromView();
+        if (!changed) return;
 
+        int after = contents.countItems();
         if (looter != null && before > 0 && after == 0) transferXP(looter);
-        contents.refreshSnapshot();
 
         if (contents.snapshot().empty()) {
             remove(EndReason.LOOTED);
@@ -312,6 +361,7 @@ public class Grave {
     }
 
     public void updateHologram() {
+        if (removed.get() || !isChunkLoaded()) return;
         if (hologram != null) hologram.remove();
 
         long now = System.currentTimeMillis();
@@ -325,6 +375,7 @@ public class Grave {
     }
 
     void updateHologramText(long now, boolean force) {
+        if (removed.get() || !isChunkLoaded()) return;
         if (hologram == null || !hologram.isValid()) {
             updateHologram();
             return;
@@ -369,24 +420,35 @@ public class Grave {
     }
 
     public void remove(@NotNull EndReason reason) {
-        if (!removed.compareAndSet(false, true)) return;
+        if (removed.get()) return;
 
         Runnable action = () -> {
+            if (removed.get()) return;
+            if (!isChunkLoaded() && requiresLoadedRemoval()) {
+                if (pendingRemovalReason == null) pendingRemovalReason = reason;
+                return;
+            }
+            if (!removed.compareAndSet(false, true)) return;
+
+            pendingRemovalReason = null;
             SpawnedGraves.removeGrave(this, reason);
             removeInventory();
-            if (entity != null) entity.remove();
-            if (hologram != null) hologram.remove();
+            despawnVisuals();
         };
 
         if (CloverScheduler.get().isOwnedByCurrentRegion(location)) action.run();
         else CloverScheduler.get().runAt(location, action);
     }
 
+    private boolean requiresLoadedRemoval() {
+        GraveSettings settings = GraveSettings.current();
+        return contents.storedXP() > 0 || settings.dropItems() && contents.countItems() > 0;
+    }
+
     public void removeInventory() {
         closeAllViewers();
         ItemStack[] drained = contents.drainItems();
         int xp = contents.takeXP();
-        contents.refreshSnapshot();
 
         GraveSettings settings = GraveSettings.current();
         if (settings.dropItems()) {
@@ -427,6 +489,16 @@ public class Grave {
     @NotNull
     public BlockKey getBlockKey() {
         return blockKey;
+    }
+
+    @NotNull
+    public ChunkKey getChunkKey() {
+        return chunkKey;
+    }
+
+    @NotNull
+    public String getStorageLocation() {
+        return storageLocation;
     }
 
     public boolean isRemoved() {
@@ -471,10 +543,12 @@ public class Grave {
         return contents.storedXP();
     }
 
+    @Nullable
     public ArmorStand getEntity() {
         return entity;
     }
 
+    @Nullable
     public GraveHologram getHologram() {
         return hologram;
     }
