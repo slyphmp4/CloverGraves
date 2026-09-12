@@ -59,7 +59,7 @@ The CI pipeline also includes Cardboard-oriented compatibility checks for the mo
 
 ## Installation
 
-1. Download `CloverGraves-2.1.0.jar` from [Releases](https://github.com/slyphmp4/CloverGraves/releases), or build the project yourself.
+1. Download `CloverGraves-2.1.1.jar` from [Releases](https://github.com/slyphmp4/CloverGraves/releases), or build the project yourself.
 2. Put the JAR into the server's `plugins/` directory.
 3. Start the server once to generate `config.yml` and `messages.yml`.
 4. Review grave lifetime, storage, protection and teleport settings.

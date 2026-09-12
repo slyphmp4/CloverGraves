@@ -98,6 +98,13 @@ Vault, Cardboard) отдельно отмечаются как проверен�
 
 # IMPLEMENTATION RESULT
 
+Release follow-up: исправления выпускаются как **2.1.1**. После первоначального
+локального аудита GitHub Actions run `34679294768` успешно выполнил сборку, тесты,
+JAR audit, сборку фиксированного Cardboard и TextDisplay smoke-test для коммита
+`bff66dbb2b4e8a504d97d99bd16722a22921095c`. Указанные ниже ограничения локальной
+проверки остаются исторической записью; полный multiplayer/MySQL/Vault runtime
+этим smoke-test не покрывается. Для release-коммита CI запускается повторно.
+
 **После исправлений: MOSTLY MODERN.** Масштабная смена архитектуры или платформы не нужна.
 
 ## Changes applied / Bugs fixed

@@ -144,7 +144,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/rewrite' && github.event.head_commit.message == 'Release CloverGraves 2.1.0'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/rewrite' && github.event.head_commit.message == 'Release CloverGraves 2.1.1'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -158,14 +158,14 @@ jobs:
           name: CloverGraves-${{ github.sha }}
           path: release
 
-      - name: Publish CloverGraves 2.1.0
+      - name: Publish CloverGraves 2.1.1
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG='v2.1.0'
-          TARGET='release/CloverGraves-2.1.0.jar'
+          TAG='v2.1.1'
+          TARGET='release/CloverGraves-2.1.1.jar'
           JAR="$(find release -maxdepth 1 -name 'CloverGraves-*.jar' ! -name '*-unshaded.jar' | head -n 1)"
           test -n "$JAR"
           if [ "$JAR" != "$TARGET" ]; then
@@ -174,23 +174,24 @@ jobs:
           sha256sum "$TARGET" | sed 's#release/##' > release/SHA256SUMS.txt
 
           cat > release-notes.md <<'NOTES'
-          CloverGraves 2.1.0 focuses on performance, persistence reliability and Cardboard-safe grave lifecycle handling.
+          CloverGraves 2.1.1 fixes persistence failures, inventory synchronization and teleport cancellation while preserving the Minecraft 26.2 / Java 25 target.
 
           ### Performance and reliability
-          - Replaced one repeating scheduler task per grave with centralized lifecycle scheduling.
-          - Added real dirty tracking so unchanged grave inventories are not repeatedly serialized or written to storage.
-          - Added HikariCP-backed MySQL pooling with conservative defaults and configurable connection timeout.
-          - Added batched dirty-grave persistence and transactional SQL batch updates.
-          - Moved SQL initialization, migration and grave loading off the server thread.
-          - Added owner and chunk indexes so grave lookup, limits, list and teleport operations avoid full-server scans.
-          - Grave visual entities now detach on chunk unload and respawn safely on chunk load without force-loading chunks.
-          - Fixed the remove-before-first-save race that could leave a ghost grave record after restart.
-          - Blocked creative clone-stack interaction against grave inventories.
+          - Failed SQL deletions are retried; unreadable storage is no longer treated as an empty database.
+          - JSON writes report failures, preserve corrupt files, and avoid duplicate records on retry.
+          - Legacy JSON migration uses a verified transactional SQL batch and preserves its source on failure.
+          - Fixed first-save/removal races and prevented older queued snapshots from overwriting newer saved state.
+          - Synchronized grave inventories before instant pickup and removal; restored death drops when grave creation fails.
+          - Failed grave reconstruction releases its history restore claim for another attempt.
+          - Cancelled teleport warmups cannot complete a newer attempt; cancelled teleports refund Vault charges.
+          - Grave targeting uses the chunk index, block centering avoids block access, and stale expiry entries are cleaned up.
+          - Updated H2 from 2.4.240 to 2.5.250 and verified opening a test database written by the previous driver.
+          - Fixed JDBC service descriptor merging and added an automated release-JAR check for all three drivers.
 
           ### Verification
-          - Added SQL and JSON bulk-persistence coverage with 1,000-record tests.
-          - Expanded the Cardboard runtime self-test to cover grave visual lifecycle behavior.
-          - Release publication runs only after Gradle tests, JAR audit, the pinned Cardboard 26.2 build and the runtime smoke-test pass.
+          - 103 tests, including SQL/JSON failure and retry, transactional migration rollback, SQLite file storage and teleport warmup regression coverage.
+          - Release publication runs only after Gradle tests, JAR audit, the pinned Cardboard 26.2 build and TextDisplay runtime smoke-test pass.
+          - The smoke-test does not replace full multiplayer gameplay or live MySQL/Vault integration testing.
 
           ### Compatibility
           - Minecraft / Paper / Cardboard: 26.2
@@ -198,15 +199,22 @@ jobs:
           - Java: 25
           - Paper API: 26.2 build 110 stable
           - Cardboard CI target: `slyphmp4/Cardboard` commit `5b62d59716f5a7d6dc0fa780ea7ca527e79272a5`
+
+          ### Upgrade notes
+          - Stop the server and back up the plugin data folder before replacing the JAR, especially when using H2.
+          - Configuration formats, SQL schema, permissions and command aliases are preserved.
+          - An unreadable storage backend now disables the plugin with a diagnostic instead of continuing with apparently empty data.
+          - Download `CloverGraves-2.1.1.jar`; `SHA256SUMS.txt` contains its checksum.
+          - See `MODERNIZATION_AUDIT.md` for the full audit and remaining limitations, including crash recovery during history restoration and mixed JSON/SQL fallback data.
           NOTES
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" "$TARGET" release/SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
-            gh release edit "$TAG" --title 'CloverGraves 2.1.0' --notes-file release-notes.md --latest --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --title 'CloverGraves 2.1.1' --notes-file release-notes.md --latest --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$TAG" "$TARGET" release/SHA256SUMS.txt \
               --target "$GITHUB_SHA" \
-              --title 'CloverGraves 2.1.0' \
+              --title 'CloverGraves 2.1.1' \
               --notes-file release-notes.md \
               --latest \
               --repo "$GITHUB_REPOSITORY"
