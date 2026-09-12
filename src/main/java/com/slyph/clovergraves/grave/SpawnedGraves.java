@@ -44,6 +44,7 @@ public class SpawnedGraves {
         byBlock.put(grave.getBlockKey(), grave);
         if (grave.getEntity() != null) byEntity.put(grave.getEntity().getUniqueId(), grave);
         count.incrementAndGet();
+        GraveLifecycleService.get().register(grave);
     }
 
     private static void enforceLimit(@NotNull Grave grave) {
@@ -63,6 +64,7 @@ public class SpawnedGraves {
     }
 
     public static void removeGrave(@NotNull Grave grave, @NotNull EndReason reason) {
+        GraveLifecycleService.get().unregister(grave);
         if (graves.remove(grave)) count.decrementAndGet();
         byBlock.remove(grave.getBlockKey(), grave);
         if (grave.getEntity() != null) byEntity.remove(grave.getEntity().getUniqueId(), grave);
