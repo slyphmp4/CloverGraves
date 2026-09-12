@@ -8,7 +8,6 @@ import com.slyph.clovergraves.grave.hologram.GraveHologram;
 import com.slyph.clovergraves.grave.hologram.TextDisplayGraveHologram;
 import com.slyph.clovergraves.listeners.DeathListener;
 import com.slyph.clovergraves.schedulers.CloverScheduler;
-import com.slyph.clovergraves.schedulers.CloverTask;
 import com.slyph.clovergraves.storage.EndReason;
 import com.slyph.clovergraves.utils.BlacklistUtils;
 import com.slyph.clovergraves.utils.ExperienceUtils;
@@ -51,7 +50,6 @@ import static com.slyph.clovergraves.AxGraves.MESSAGEUTILS;
 
 public class Grave {
     private static final Vector ZERO_VECTOR = new Vector(0, 0, 0);
-    private static final long TICK_PERIOD = 2L;
     private static final float HOLOGRAM_LINE_SPACING = 0.3f;
     private static final long INTERACTION_DEBOUNCE_NANOS = 100_000_000L;
 
@@ -64,7 +62,6 @@ public class Grave {
     private final GraveContents contents;
     private final GraveInventoryHolder holder;
     private final ArmorStand entity;
-    private final CloverTask tickTask;
     private final AtomicBoolean removed = new AtomicBoolean(false);
     private final Map<UUID, Long> lastProtectionNotice = new ConcurrentHashMap<>();
     private final Map<UUID, Long> lastInteractionAt = new ConcurrentHashMap<>();
@@ -134,31 +131,23 @@ public class Grave {
 
         contents.refreshSnapshot();
         updateHologram();
-        tickTask = CloverScheduler.get().runTimerAt(location, this::tick, TICK_PERIOD, TICK_PERIOD);
     }
 
-    public void tick() {
+    void rotateMarker(@NotNull GraveSettings settings) {
+        if (removed.get() || entity.isDead()) return;
+        Location current = entity.getLocation();
+        entity.setRotation(current.getYaw() + settings.autoRotationSpeed(), current.getPitch());
+    }
+
+    void maintainOpenView(@NotNull GraveSettings settings) {
         if (removed.get()) return;
-        contents.closeViewIfEmpty();
-        contents.refreshSnapshot();
-
-        GraveSettings settings = GraveSettings.current();
-        GraveSnapshot snapshot = contents.snapshot();
-        boolean outOfTime = settings.despawnTimeSeconds() != -1
-                && settings.despawnTimeSeconds() * 1_000L <= System.currentTimeMillis() - spawned;
-
-        if (outOfTime || snapshot.empty()) {
-            remove(outOfTime ? EndReason.EXPIRED : EndReason.LOOTED);
-            return;
-        }
-
-        if (settings.autoRotationEnabled() && !entity.isDead()) {
-            Location current = entity.getLocation();
-            entity.setRotation(current.getYaw() + settings.autoRotationSpeed(), current.getPitch());
-        }
-
-        updateHologramText(false);
         closeDistantViewers(settings);
+        contents.closeViewIfEmpty();
+    }
+
+    boolean hasOpenViewers() {
+        Inventory view = contents.viewIfOpen();
+        return view != null && !view.getViewers().isEmpty();
     }
 
     private void closeDistantViewers(@NotNull GraveSettings settings) {
@@ -215,6 +204,7 @@ public class Grave {
         if (openEvent.isCancelled()) return;
 
         opener.openInventory(contents.openFor(holder, rows));
+        GraveLifecycleService.get().markViewOpen(this);
     }
 
     private boolean acceptInteraction(@NotNull Player opener) {
@@ -297,7 +287,7 @@ public class Grave {
             remove(EndReason.LOOTED);
             return;
         }
-        updateHologramText(true);
+        updateHologramText(System.currentTimeMillis(), true);
     }
 
     public void syncFromView(@Nullable Player looter) {
@@ -314,7 +304,7 @@ public class Grave {
             remove(EndReason.LOOTED);
             return;
         }
-        updateHologramText(true);
+        updateHologramText(System.currentTimeMillis(), true);
     }
 
     private boolean isSlotEmpty(ItemStack item) {
@@ -334,17 +324,12 @@ public class Grave {
         lastHologramUpdateAt = now;
     }
 
-    private void updateHologramText(boolean force) {
-        if (hologram == null) {
-            updateHologram();
-            return;
-        }
-        if (!hologram.isValid()) {
+    void updateHologramText(long now, boolean force) {
+        if (hologram == null || !hologram.isValid()) {
             updateHologram();
             return;
         }
 
-        long now = System.currentTimeMillis();
         if (!force && now - lastHologramUpdateAt < 1_000L) return;
         lastHologramUpdateAt = now;
         hologram.setLines(formatHologramLines(now));
@@ -387,7 +372,6 @@ public class Grave {
         if (!removed.compareAndSet(false, true)) return;
 
         Runnable action = () -> {
-            tickTask.cancel();
             SpawnedGraves.removeGrave(this, reason);
             removeInventory();
             if (entity != null) entity.remove();
@@ -479,6 +463,7 @@ public class Grave {
 
     @NotNull
     public Inventory getGui() {
+        GraveLifecycleService.get().markViewOpen(this);
         return contents.openFor(holder, rows);
     }
 
