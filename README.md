@@ -47,11 +47,11 @@ The project is designed around Paper 26.2 and Cardboard compatibility without ru
 | Minecraft / Paper build target | **26.2** |
 | Java | **25** |
 | Paper API build | `26.2.build.110-stable` |
-| Bukkit `api-version` | `1.16` |
+| Bukkit `api-version` | `26.2` |
 | PlaceholderAPI | Optional, built against **2.12.3** |
 | Vault | Optional, used for teleport costs |
 
-The Paper build target and Bukkit `api-version` are different things here: CloverGraves is compiled and tested against the modern 26.2 API, while `plugin.yml` intentionally declares `api-version: 1.16`.
+CloverGraves is compiled, declared and tested for Minecraft/Paper/Cardboard 26.2. The plugin does not lower `api-version` to claim unsupported backwards compatibility.
 
 The CI pipeline also includes Cardboard-oriented compatibility checks for the modern runtime features CloverGraves uses, including `TextDisplay` behavior.
 
@@ -59,7 +59,7 @@ The CI pipeline also includes Cardboard-oriented compatibility checks for the mo
 
 ## Installation
 
-1. Download `CloverGraves-2.0.0.jar` from [Releases](https://github.com/slyphmp4/CloverGraves/releases), or build the project yourself.
+1. Download `CloverGraves-2.1.0.jar` from [Releases](https://github.com/slyphmp4/CloverGraves/releases), or build the project yourself.
 2. Put the JAR into the server's `plugins/` directory.
 3. Start the server once to generate `config.yml` and `messages.yml`.
 4. Review grave lifetime, storage, protection and teleport settings.
