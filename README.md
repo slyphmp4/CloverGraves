@@ -53,13 +53,13 @@ The project is designed around Paper 26.2 and Cardboard compatibility without ru
 
 CloverGraves is compiled, declared and tested for Minecraft/Paper/Cardboard 26.2. The plugin does not lower `api-version` to claim unsupported backwards compatibility.
 
-The CI pipeline also includes Cardboard-oriented compatibility checks for the modern runtime features CloverGraves uses, including `TextDisplay` behavior.
+The CI pipeline also includes Cardboard-oriented compatibility checks for the modern runtime features CloverGraves uses, including `TextDisplay` behavior and the real grave inventory opening path.
 
 ---
 
 ## Installation
 
-1. Download `CloverGraves-2.1.1.jar` from [Releases](https://github.com/slyphmp4/CloverGraves/releases), or build the project yourself.
+1. Download `CloverGraves-2.1.2.jar` from [Releases](https://github.com/slyphmp4/CloverGraves/releases), or build the project yourself.
 2. Put the JAR into the server's `plugins/` directory.
 3. Start the server once to generate `config.yml` and `messages.yml`.
 4. Review grave lifetime, storage, protection and teleport settings.
