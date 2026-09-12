@@ -11,7 +11,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class GraveContents {
@@ -37,10 +36,11 @@ public final class GraveContents {
     }
 
     @NotNull
+    @SuppressWarnings("deprecation")
     public Inventory openFor(@NotNull GraveInventoryHolder holder, int rows) {
         assertOwned();
         if (view == null) {
-            view = Bukkit.createInventory(holder, rows * 9, LegacyComponentSerializer.legacySection().deserialize(title));
+            view = Bukkit.createInventory(holder, rows * 9, title);
             holder.bind(view);
             view.setContents(items);
         }
