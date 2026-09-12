@@ -3,6 +3,7 @@ package com.slyph.clovergraves.compat;
 import com.slyph.clovergraves.AxGraves;
 import com.slyph.clovergraves.config.HologramSettings;
 import com.slyph.clovergraves.grave.Grave;
+import com.slyph.clovergraves.grave.GraveInventoryHolder;
 import com.slyph.clovergraves.grave.SpawnedGraves;
 import com.slyph.clovergraves.grave.hologram.TextDisplayGraveHologram;
 import com.slyph.clovergraves.storage.EndReason;
@@ -21,6 +22,7 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.ArrayList;
@@ -141,12 +143,24 @@ public final class CardboardCompatibilitySelfTest {
                 throw new IllegalStateException("respawned grave marker was not rebound in the entity index");
             }
 
+            GraveInventoryHolder inventoryHolder = new GraveInventoryHolder(lifecycleGrave);
+            Inventory graveInventory = lifecycleGrave.contents().openFor(inventoryHolder, 1);
+            if (inventoryHolder.getInventory() != graveInventory) {
+                throw new IllegalStateException("grave inventory holder was not bound to the created inventory");
+            }
+            if (graveInventory.getSize() != 9) {
+                throw new IllegalStateException("grave inventory has an unexpected size");
+            }
+            ItemStack firstItem = graveInventory.getItem(0);
+            if (firstItem == null || firstItem.getType() != Material.STONE) {
+                throw new IllegalStateException("grave inventory contents were not populated");
+            }
+
             lifecycleGrave.contents().drainItems();
             lifecycleGrave.remove(EndReason.REMOVED);
             if (!lifecycleGrave.isRemoved()) throw new IllegalStateException("test grave was not removed");
             lifecycleGrave = null;
 
-            Bukkit.createInventory(null, 9, Component.text("CloverGraves Test"));
             CloverLogger.info("CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_PASS");
         } catch (Throwable throwable) {
             CloverLogger.error("CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_FAIL", throwable);
