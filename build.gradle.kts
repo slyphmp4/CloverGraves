@@ -24,6 +24,9 @@ dependencies {
     implementation("com.h2database:h2:2.4.240")
     implementation("org.xerial:sqlite-jdbc:3.53.4.0")
     implementation("com.mysql:mysql-connector-j:26.7.0")
+    implementation("com.zaxxer:HikariCP:7.1.0") {
+        exclude(group = "org.slf4j", module = "slf4j-api")
+    }
 
     testImplementation(platform("org.junit:junit-bom:5.14.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -65,6 +68,7 @@ tasks.shadowJar {
     archiveClassifier.set("")
     mergeServiceFiles()
     relocate("org.bstats", "com.slyph.clovergraves.libs.bstats")
+    relocate("com.zaxxer.hikari", "com.slyph.clovergraves.libs.hikari")
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA")
 }
 
