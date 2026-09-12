@@ -3,6 +3,7 @@ package com.slyph.clovergraves.schedulers;
 import com.slyph.clovergraves.grave.Grave;
 import com.slyph.clovergraves.grave.GraveSnapshot;
 import com.slyph.clovergraves.grave.SpawnedGraves;
+import com.slyph.clovergraves.storage.EndReason;
 import com.slyph.clovergraves.storage.GraveRecord;
 import com.slyph.clovergraves.storage.GraveStorage;
 import com.slyph.clovergraves.utils.CloverLogger;
@@ -75,20 +76,36 @@ public class SaveGraves {
         try {
             List<Long> ids = storage.saveAll(records);
             if (ids.size() != requests.size()) {
+                clearFailedRemovalTombstones(requests);
                 CloverLogger.error("storage returned {} ids for {} dirty graves; none were marked persisted", ids.size(), requests.size());
                 return;
             }
 
             for (int i = 0; i < requests.size(); i++) {
                 long assignedId = ids.get(i);
-                if (assignedId <= 0) continue;
-
                 PersistRequest request = requests.get(i);
+                if (assignedId <= 0) {
+                    if (request.grave().isRemoved()) SpawnedGraves.consumeUnsavedRemoval(request.grave());
+                    continue;
+                }
+
                 request.grave().assignStorageId(assignedId);
+                EndReason removedReason = SpawnedGraves.consumeUnsavedRemoval(request.grave());
+                if (removedReason != null) {
+                    storage.remove(assignedId, removedReason);
+                    continue;
+                }
                 request.grave().markPersisted(request.snapshot().version());
             }
         } catch (RuntimeException ex) {
+            clearFailedRemovalTombstones(requests);
             CloverLogger.error("failed to batch-save {} dirty grave(s)", records.size(), ex);
+        }
+    }
+
+    private static void clearFailedRemovalTombstones(@NotNull List<PersistRequest> requests) {
+        for (PersistRequest request : requests) {
+            if (request.grave().isRemoved()) SpawnedGraves.consumeUnsavedRemoval(request.grave());
         }
     }
 
@@ -106,11 +123,20 @@ public class SaveGraves {
     private static void persistOne(@NotNull Grave grave, @NotNull GraveSnapshot snapshot, @NotNull GraveStorage storage) {
         try {
             long assignedId = storage.save(toRecord(grave, snapshot));
-            if (assignedId <= 0) return;
+            if (assignedId <= 0) {
+                if (grave.isRemoved()) SpawnedGraves.consumeUnsavedRemoval(grave);
+                return;
+            }
 
             grave.assignStorageId(assignedId);
+            EndReason removedReason = SpawnedGraves.consumeUnsavedRemoval(grave);
+            if (removedReason != null) {
+                storage.remove(assignedId, removedReason);
+                return;
+            }
             grave.markPersisted(snapshot.version());
         } catch (RuntimeException ex) {
+            if (grave.isRemoved()) SpawnedGraves.consumeUnsavedRemoval(grave);
             CloverLogger.error("failed to save a grave to storage", ex);
         }
     }
