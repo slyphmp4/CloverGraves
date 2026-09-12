@@ -40,9 +40,13 @@ public final class GraveContents {
     public Inventory openFor(@NotNull GraveInventoryHolder holder, int rows) {
         assertOwned();
         if (view == null) {
-            view = Bukkit.createInventory(holder, rows * 9, title);
-            holder.bind(view);
-            view.setContents(items);
+            Inventory created = Bukkit.createInventory(holder, rows * 9, title);
+            if (created == null) {
+                throw new IllegalStateException("Bukkit.createInventory returned null for grave inventory");
+            }
+            created.setContents(items);
+            holder.bind(created);
+            view = created;
         }
         return view;
     }
