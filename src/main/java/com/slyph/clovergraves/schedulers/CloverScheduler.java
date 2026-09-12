@@ -57,9 +57,13 @@ public final class CloverScheduler {
         return scheduleSync(Math.max(0L, delay), -1L, consumer);
     }
 
+    public CloverTask runTimer(@NotNull Runnable runnable, long delay, long period) {
+        return scheduleSync(Math.max(0L, delay), Math.max(1L, period), task -> runnable.run());
+    }
+
     public CloverTask runTimerAt(@NotNull Location location, @NotNull Runnable runnable, long delay, long period) {
         Objects.requireNonNull(location.getWorld(), "location world");
-        return scheduleSync(Math.max(0L, delay), Math.max(1L, period), task -> runnable.run());
+        return runTimer(runnable, delay, period);
     }
 
     public CloverTask runLater(@NotNull Entity entity, @NotNull Consumer<CloverTask> consumer, @NotNull Runnable retired, long delay) {
