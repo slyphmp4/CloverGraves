@@ -58,13 +58,10 @@ public class SpawnedGraves {
         if (graveLimit < 0) return;
 
         ConcurrentLinkedDeque<Grave> ownerGraves = byOwner.get(grave.getPlayer().getUniqueId());
-        if (ownerGraves == null) return;
+        if (ownerGraves == null || ownerGraves.size() < graveLimit) return;
 
-        while (ownerGraves.size() >= graveLimit && !ownerGraves.isEmpty()) {
-            Grave oldest = ownerGraves.peekFirst();
-            if (oldest == null) break;
-            oldest.remove(EndReason.LIMIT);
-        }
+        Grave oldest = ownerGraves.peekFirst();
+        if (oldest != null) oldest.remove(EndReason.LIMIT);
     }
 
     public static void removeGrave(@NotNull Grave grave, @NotNull EndReason reason) {
