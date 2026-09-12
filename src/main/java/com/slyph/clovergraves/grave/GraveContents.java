@@ -51,11 +51,16 @@ public final class GraveContents {
         return view;
     }
 
-    public void syncFromView() {
+    public boolean syncFromView() {
         assertOwned();
-        if (view == null) return;
-        items = view.getContents();
-        bumpVersion();
+        if (view == null) return false;
+
+        ItemStack[] next = view.getContents();
+        if (sameContents(items, next)) return false;
+
+        items = next;
+        markChanged();
+        return true;
     }
 
     public void closeViewIfEmpty() {
@@ -68,11 +73,14 @@ public final class GraveContents {
         return items;
     }
 
-    public void setItems(@NotNull ItemStack[] newItems) {
+    public boolean setItems(@NotNull ItemStack[] newItems) {
         assertOwned();
-        items = newItems;
-        if (view != null) view.setContents(newItems);
-        bumpVersion();
+        if (sameContents(items, newItems)) return false;
+
+        items = newItems.clone();
+        if (view != null) view.setContents(items);
+        markChanged();
+        return true;
     }
 
     public int storedXP() {
@@ -82,8 +90,10 @@ public final class GraveContents {
     public int takeXP() {
         assertOwned();
         int taken = storedXP;
+        if (taken == 0) return 0;
+
         storedXP = 0;
-        if (taken != 0) bumpVersion();
+        markChanged();
         return taken;
     }
 
@@ -103,20 +113,24 @@ public final class GraveContents {
     public ItemStack[] drainItems() {
         assertOwned();
         ItemStack[] drained = items;
+        if (drained.length == 0) return drained;
+
         items = new ItemStack[0];
         if (view != null) view.clear();
-        bumpVersion();
+        markChanged();
         return drained;
     }
 
-    private void bumpVersion() {
+    private void markChanged() {
         version.incrementAndGet();
+        refreshSnapshot();
     }
 
     public void refreshSnapshot() {
         assertOwned();
         long currentVersion = version.get();
         if (snapshot.version() == currentVersion) return;
+
         byte[] serialized = ItemSerialization.serialize(items);
         int count = countItems();
         snapshot = new GraveSnapshot(currentVersion, count, storedXP, serialized, count == 0 && storedXP == 0);
@@ -125,5 +139,20 @@ public final class GraveContents {
     @NotNull
     public GraveSnapshot snapshot() {
         return snapshot;
+    }
+
+    private boolean sameContents(@NotNull ItemStack[] left, @NotNull ItemStack[] right) {
+        if (left.length != right.length) return false;
+        for (int i = 0; i < left.length; i++) {
+            if (!sameItem(left[i], right[i])) return false;
+        }
+        return true;
+    }
+
+    private boolean sameItem(@Nullable ItemStack left, @Nullable ItemStack right) {
+        boolean leftEmpty = left == null || left.getType().isAir();
+        boolean rightEmpty = right == null || right.getType().isAir();
+        if (leftEmpty || rightEmpty) return leftEmpty == rightEmpty;
+        return left.equals(right);
     }
 }

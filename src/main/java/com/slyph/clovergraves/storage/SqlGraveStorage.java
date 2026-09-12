@@ -1,6 +1,8 @@
 package com.slyph.clovergraves.storage;
 
 import com.slyph.clovergraves.utils.CloverLogger;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.jetbrains.annotations.NotNull;
 
 import java.sql.Connection;
@@ -9,6 +11,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,28 +22,86 @@ public class SqlGraveStorage implements GraveStorage {
         Connection open() throws SQLException;
     }
 
+    private interface ConnectionProvider extends AutoCloseable {
+        Connection open() throws SQLException;
+
+        @Override
+        default void close() {
+        }
+    }
+
     private final JdbcConfig config;
-    private final ConnectionFactory connectionFactory;
+    private final ConnectionProvider connectionProvider;
     private final String tablePrefix;
     private final boolean historyEnabled;
     private final int keepPerPlayer;
     private final int keepDays;
 
     public SqlGraveStorage(@NotNull JdbcConfig config, boolean historyEnabled, int keepPerPlayer, int keepDays) {
-        this(config, config::open, historyEnabled, keepPerPlayer, keepDays);
+        this(config, JdbcPoolConfig.defaults(), historyEnabled, keepPerPlayer, keepDays);
+    }
+
+    public SqlGraveStorage(@NotNull JdbcConfig config, @NotNull JdbcPoolConfig poolConfig,
+                           boolean historyEnabled, int keepPerPlayer, int keepDays) {
+        this(config, providerFor(config, poolConfig), historyEnabled, keepPerPlayer, keepDays);
     }
 
     SqlGraveStorage(@NotNull JdbcConfig config, @NotNull ConnectionFactory connectionFactory,
                     boolean historyEnabled, int keepPerPlayer, int keepDays) {
+        this(config, new ConnectionProvider() {
+            @Override
+            public Connection open() throws SQLException {
+                return connectionFactory.open();
+            }
+        }, historyEnabled, keepPerPlayer, keepDays);
+    }
+
+    private SqlGraveStorage(@NotNull JdbcConfig config, @NotNull ConnectionProvider connectionProvider,
+                            boolean historyEnabled, int keepPerPlayer, int keepDays) {
         if (!config.tablePrefix().matches("[A-Za-z0-9_]*")) {
             throw new IllegalArgumentException("storage.table-prefix may contain only letters, numbers and underscores");
         }
         this.config = config;
-        this.connectionFactory = connectionFactory;
+        this.connectionProvider = connectionProvider;
         this.tablePrefix = config.tablePrefix();
         this.historyEnabled = historyEnabled;
         this.keepPerPlayer = Math.max(0, keepPerPlayer);
         this.keepDays = Math.max(0, keepDays);
+    }
+
+    @NotNull
+    private static ConnectionProvider providerFor(@NotNull JdbcConfig config, @NotNull JdbcPoolConfig poolConfig) {
+        if (config.type() != JdbcConfig.Type.MYSQL) {
+            return new ConnectionProvider() {
+                @Override
+                public Connection open() throws SQLException {
+                    return config.open();
+                }
+            };
+        }
+
+        HikariConfig hikari = new HikariConfig();
+        hikari.setJdbcUrl(config.url());
+        if (!config.username().isBlank()) hikari.setUsername(config.username());
+        if (!config.password().isBlank()) hikari.setPassword(config.password());
+        hikari.setMaximumPoolSize(poolConfig.maximumPoolSize());
+        hikari.setMinimumIdle(poolConfig.minimumIdle());
+        hikari.setConnectionTimeout(poolConfig.connectionTimeoutMillis());
+        hikari.setValidationTimeout(Math.min(poolConfig.connectionTimeoutMillis(), 5_000L));
+        hikari.setPoolName("CloverGraves-MySQL");
+
+        HikariDataSource dataSource = new HikariDataSource(hikari);
+        return new ConnectionProvider() {
+            @Override
+            public Connection open() throws SQLException {
+                return dataSource.getConnection();
+            }
+
+            @Override
+            public void close() {
+                dataSource.close();
+            }
+        };
     }
 
     private String graves() {
@@ -105,7 +166,8 @@ public class SqlGraveStorage implements GraveStorage {
     @NotNull
     public List<GraveRecord> loadAll() {
         List<GraveRecord> result = new ArrayList<>();
-        String sql = "SELECT id, owner, owner_name, location, items, data_version, stored_xp, created_at FROM " + graves();
+        String sql = "SELECT id, owner, owner_name, location, items, data_version, stored_xp, created_at FROM "
+                + graves() + " ORDER BY created_at ASC";
 
         try (Connection c = open(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) result.add(readLiveRecord(rs));
@@ -117,29 +179,81 @@ public class SqlGraveStorage implements GraveStorage {
 
     @Override
     public long save(@NotNull GraveRecord record) {
-        if (record.id() > 0) {
-            String sql = "UPDATE " + graves() + " SET owner=?, owner_name=?, location=?, items=?, data_version=?, stored_xp=?, created_at=? WHERE id=?";
-            try (Connection c = open(); PreparedStatement ps = c.prepareStatement(sql)) {
-                bindGrave(ps, record);
-                ps.setLong(8, record.id());
-                if (ps.executeUpdate() > 0) return record.id();
-            } catch (SQLException ex) {
-                CloverLogger.error("failed to update a grave in the database", ex);
-                return record.id();
-            }
-        }
+        List<Long> ids = saveAll(List.of(record));
+        return ids.isEmpty() ? -1L : ids.getFirst();
+    }
 
-        String sql = "INSERT INTO " + graves() + " (owner, owner_name, location, items, data_version, stored_xp, created_at) VALUES (?,?,?,?,?,?,?)";
-        try (Connection c = open(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+    @Override
+    @NotNull
+    public List<Long> saveAll(@NotNull List<GraveRecord> records) {
+        if (records.isEmpty()) return List.of();
+
+        String updateSql = "UPDATE " + graves()
+                + " SET owner=?, owner_name=?, location=?, items=?, data_version=?, stored_xp=?, created_at=? WHERE id=?";
+
+        try (Connection c = open()) {
+            boolean originalAutoCommit = c.getAutoCommit();
+            c.setAutoCommit(false);
+            try {
+                List<Long> ids = new ArrayList<>(Collections.nCopies(records.size(), -1L));
+                List<Integer> updateIndexes = new ArrayList<>();
+
+                try (PreparedStatement updates = c.prepareStatement(updateSql)) {
+                    for (int i = 0; i < records.size(); i++) {
+                        GraveRecord record = records.get(i);
+                        if (record.id() <= 0) continue;
+
+                        bindGrave(updates, record);
+                        updates.setLong(8, record.id());
+                        updates.addBatch();
+                        updateIndexes.add(i);
+                    }
+
+                    if (!updateIndexes.isEmpty()) {
+                        int[] results = updates.executeBatch();
+                        for (int i = 0; i < updateIndexes.size(); i++) {
+                            int recordIndex = updateIndexes.get(i);
+                            GraveRecord record = records.get(recordIndex);
+                            int result = results[i];
+                            if (result == Statement.EXECUTE_FAILED || result == 0) {
+                                ids.set(recordIndex, insertOne(c, record));
+                            } else {
+                                ids.set(recordIndex, record.id());
+                            }
+                        }
+                    }
+                }
+
+                for (int i = 0; i < records.size(); i++) {
+                    if (ids.get(i) > 0) continue;
+                    ids.set(i, insertOne(c, records.get(i)));
+                }
+
+                c.commit();
+                return ids;
+            } catch (SQLException ex) {
+                c.rollback();
+                throw ex;
+            } finally {
+                c.setAutoCommit(originalAutoCommit);
+            }
+        } catch (SQLException ex) {
+            CloverLogger.error("failed to batch-save {} grave(s) in the database", records.size(), ex);
+            return List.of();
+        }
+    }
+
+    private long insertOne(@NotNull Connection connection, @NotNull GraveRecord record) throws SQLException {
+        String sql = "INSERT INTO " + graves()
+                + " (owner, owner_name, location, items, data_version, stored_xp, created_at) VALUES (?,?,?,?,?,?,?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             bindGrave(ps, record);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 if (keys.next()) return keys.getLong(1);
             }
-        } catch (SQLException ex) {
-            CloverLogger.error("failed to insert a grave into the database", ex);
         }
-        return record.id();
+        throw new SQLException("database did not return a generated grave id");
     }
 
     private void bindGrave(@NotNull PreparedStatement ps, @NotNull GraveRecord record) throws SQLException {
@@ -155,6 +269,7 @@ public class SqlGraveStorage implements GraveStorage {
     @Override
     public void remove(long id, @NotNull EndReason reason) {
         try (Connection c = open()) {
+            boolean originalAutoCommit = c.getAutoCommit();
             c.setAutoCommit(false);
             try {
                 UUID owner = archiveAndDelete(c, id, reason);
@@ -164,7 +279,7 @@ public class SqlGraveStorage implements GraveStorage {
                 c.rollback();
                 throw ex;
             } finally {
-                c.setAutoCommit(true);
+                c.setAutoCommit(originalAutoCommit);
             }
         } catch (SQLException ex) {
             CloverLogger.error("failed to remove/archive grave {} in the database", id, ex);
@@ -279,10 +394,15 @@ public class SqlGraveStorage implements GraveStorage {
 
     @Override
     public void close() {
+        try {
+            connectionProvider.close();
+        } catch (Exception ex) {
+            CloverLogger.error("failed to close JDBC connection provider", ex);
+        }
     }
 
     private Connection open() throws SQLException {
-        return connectionFactory.open();
+        return connectionProvider.open();
     }
 
     @NotNull

@@ -102,10 +102,27 @@ public class JsonGraveStorage implements GraveStorage {
 
     @Override
     public long save(@NotNull GraveRecord record) {
-        GraveRecord toStore = record.id() > 0 ? record : record.withId(nextId.getAndIncrement());
+        GraveRecord toStore = assignId(record);
         live.put(toStore.id(), toStore);
         flush();
         return toStore.id();
+    }
+
+    @Override
+    @NotNull
+    public List<Long> saveAll(@NotNull List<GraveRecord> records) {
+        List<Long> ids = new ArrayList<>(records.size());
+        for (GraveRecord record : records) {
+            GraveRecord toStore = assignId(record);
+            live.put(toStore.id(), toStore);
+            ids.add(toStore.id());
+        }
+        if (!records.isEmpty()) flush();
+        return ids;
+    }
+
+    private GraveRecord assignId(@NotNull GraveRecord record) {
+        return record.id() > 0 ? record : record.withId(nextId.getAndIncrement());
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.slyph.clovergraves.storage;
 
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -19,6 +20,17 @@ public interface GraveStorage {
 
     /** Upserts a live grave's current state; returns the record's id (newly assigned if {@code record.id() <= 0}). */
     long save(@NotNull GraveRecord record);
+
+    /**
+     * Saves multiple live grave records. Implementations may override this to reuse a connection,
+     * transaction or database batch. The returned ids are aligned with the input order.
+     */
+    @NotNull
+    default List<Long> saveAll(@NotNull List<GraveRecord> records) {
+        List<Long> ids = new ArrayList<>(records.size());
+        for (GraveRecord record : records) ids.add(save(record));
+        return ids;
+    }
 
     /** Removes a live grave and, if the backend supports history, archives it under {@code reason}. */
     void remove(long id, @NotNull EndReason reason);

@@ -10,6 +10,7 @@ import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
 
@@ -23,13 +24,11 @@ public enum List {
     public void execute(CommandSender sender) {
         boolean found = false;
         int despawnTime = CONFIG.getInt("despawn-time-seconds", 1800);
+        Collection<Grave> graves = sender instanceof Player player && !sender.hasPermission("axgraves.list.other")
+                ? SpawnedGraves.getGraves(player.getUniqueId())
+                : SpawnedGraves.getGraves();
 
-        for (Grave grave : SpawnedGraves.getGraves()) {
-            if (sender instanceof Player player && !grave.getPlayer().getUniqueId().equals(player.getUniqueId())
-                    && !sender.hasPermission("axgraves.list.other")) {
-                continue;
-            }
-
+        for (Grave grave : graves) {
             Location location = grave.getLocation();
             long remaining = despawnTime != -1
                     ? Math.max(0L, despawnTime * 1_000L - (System.currentTimeMillis() - grave.getSpawned()))

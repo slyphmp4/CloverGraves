@@ -3,12 +3,14 @@ package com.slyph.clovergraves.schedulers;
 import com.slyph.clovergraves.grave.Grave;
 import com.slyph.clovergraves.grave.GraveSnapshot;
 import com.slyph.clovergraves.grave.SpawnedGraves;
+import com.slyph.clovergraves.storage.EndReason;
 import com.slyph.clovergraves.storage.GraveRecord;
 import com.slyph.clovergraves.storage.GraveStorage;
-import com.slyph.clovergraves.storage.LocationCodec;
 import com.slyph.clovergraves.utils.CloverLogger;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -17,9 +19,11 @@ import static com.slyph.clovergraves.AxGraves.EXECUTOR;
 
 public class SaveGraves {
     private static ScheduledFuture<?> future;
+    private static volatile int dataVersion = -1;
 
     public static void start() {
         if (future != null) future.cancel(false);
+        dataVersion = resolveDataVersion();
 
         int seconds = CONFIG.getInt("storage.flush-interval-seconds", CONFIG.getInt("save-graves.auto-save-seconds", 30));
         if (seconds == -1) return;
@@ -28,7 +32,7 @@ public class SaveGraves {
         future = EXECUTOR.scheduleAtFixedRate(() -> {
             try {
                 flushDirty();
-            } catch (Exception ex) {
+            } catch (RuntimeException ex) {
                 CloverLogger.error("failed to save graves", ex);
             }
         }, seconds, seconds, TimeUnit.SECONDS);
@@ -54,50 +58,113 @@ public class SaveGraves {
         GraveStorage storage = SpawnedGraves.storage();
         if (storage == null) return;
 
-        SpawnedGraves.PendingRemoval removal;
-        while ((removal = SpawnedGraves.pollRemoval()) != null) {
-            try {
-                storage.remove(removal.storageId(), removal.reason());
-            } catch (Exception ex) {
-                CloverLogger.error("failed to remove grave {} from storage", removal.storageId(), ex);
-            }
-        }
+        flushRemovals(storage);
+
+        List<PersistRequest> requests = new ArrayList<>();
+        List<GraveRecord> records = new ArrayList<>();
 
         for (Grave grave : SpawnedGraves.getGraves()) {
             GraveSnapshot snapshot = grave.snapshot();
             if (snapshot.version() == grave.lastPersistedVersion()) continue;
-            persistOne(grave, snapshot, storage);
+
+            requests.add(new PersistRequest(grave, snapshot));
+            records.add(toRecord(grave, snapshot));
+        }
+
+        if (records.isEmpty()) return;
+
+        try {
+            List<Long> ids = storage.saveAll(records);
+            if (ids.size() != requests.size()) {
+                clearFailedRemovalTombstones(requests);
+                CloverLogger.error("storage returned {} ids for {} dirty graves; none were marked persisted", ids.size(), requests.size());
+                return;
+            }
+
+            for (int i = 0; i < requests.size(); i++) {
+                long assignedId = ids.get(i);
+                PersistRequest request = requests.get(i);
+                if (assignedId <= 0) {
+                    if (request.grave().isRemoved()) SpawnedGraves.consumeUnsavedRemoval(request.grave());
+                    continue;
+                }
+
+                request.grave().assignStorageId(assignedId);
+                EndReason removedReason = SpawnedGraves.consumeUnsavedRemoval(request.grave());
+                if (removedReason != null) {
+                    storage.remove(assignedId, removedReason);
+                    continue;
+                }
+                request.grave().markPersisted(request.snapshot().version());
+            }
+        } catch (RuntimeException ex) {
+            clearFailedRemovalTombstones(requests);
+            CloverLogger.error("failed to batch-save {} dirty grave(s)", records.size(), ex);
+        }
+    }
+
+    private static void clearFailedRemovalTombstones(@NotNull List<PersistRequest> requests) {
+        for (PersistRequest request : requests) {
+            if (request.grave().isRemoved()) SpawnedGraves.consumeUnsavedRemoval(request.grave());
+        }
+    }
+
+    private static void flushRemovals(@NotNull GraveStorage storage) {
+        SpawnedGraves.PendingRemoval removal;
+        while ((removal = SpawnedGraves.pollRemoval()) != null) {
+            try {
+                storage.remove(removal.storageId(), removal.reason());
+            } catch (RuntimeException ex) {
+                CloverLogger.error("failed to remove grave {} from storage", removal.storageId(), ex);
+            }
         }
     }
 
     private static void persistOne(@NotNull Grave grave, @NotNull GraveSnapshot snapshot, @NotNull GraveStorage storage) {
         try {
-            GraveRecord record = new GraveRecord(
-                    grave.storageId(),
-                    grave.getPlayer().getUniqueId(),
-                    grave.getPlayerName(),
-                    LocationCodec.serialize(grave.getLocation()),
-                    snapshot.serializedItems(),
-                    currentDataVersion(),
-                    snapshot.storedXP(),
-                    grave.getSpawned(),
-                    null,
-                    null
-            );
+            long assignedId = storage.save(toRecord(grave, snapshot));
+            if (assignedId <= 0) {
+                if (grave.isRemoved()) SpawnedGraves.consumeUnsavedRemoval(grave);
+                return;
+            }
 
-            long assignedId = storage.save(record);
             grave.assignStorageId(assignedId);
+            EndReason removedReason = SpawnedGraves.consumeUnsavedRemoval(grave);
+            if (removedReason != null) {
+                storage.remove(assignedId, removedReason);
+                return;
+            }
             grave.markPersisted(snapshot.version());
-        } catch (Exception ex) {
+        } catch (RuntimeException ex) {
+            if (grave.isRemoved()) SpawnedGraves.consumeUnsavedRemoval(grave);
             CloverLogger.error("failed to save a grave to storage", ex);
         }
     }
 
-    private static int currentDataVersion() {
+    @NotNull
+    private static GraveRecord toRecord(@NotNull Grave grave, @NotNull GraveSnapshot snapshot) {
+        return new GraveRecord(
+                grave.storageId(),
+                grave.getPlayer().getUniqueId(),
+                grave.getPlayerName(),
+                grave.getStorageLocation(),
+                snapshot.serializedItems(),
+                dataVersion,
+                snapshot.storedXP(),
+                grave.getSpawned(),
+                null,
+                null
+        );
+    }
+
+    private static int resolveDataVersion() {
         try {
             return org.bukkit.Bukkit.getUnsafe().getDataVersion();
         } catch (Throwable ignored) {
             return -1;
         }
+    }
+
+    private record PersistRequest(@NotNull Grave grave, @NotNull GraveSnapshot snapshot) {
     }
 }

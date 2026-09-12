@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -66,6 +67,54 @@ class SqlGraveStorageTest {
         List<GraveRecord> all = storage.loadAll();
         assertEquals(1, all.size());
         assertEquals(99, all.getFirst().storedXP());
+    }
+
+    @Test
+    void batchSaveHandlesOneThousandRecordsAndUpdatesThemInPlace() {
+        UUID owner = UUID.randomUUID();
+        List<GraveRecord> initial = new ArrayList<>();
+        for (int i = 0; i < 1_000; i++) {
+            initial.add(new GraveRecord(
+                    -1,
+                    owner,
+                    "Player-" + i,
+                    "world;" + i + ";64.0;0.0;0.0;0.0",
+                    new byte[]{(byte) i},
+                    3465,
+                    i,
+                    1_000L + i,
+                    null,
+                    null
+            ));
+        }
+
+        List<Long> ids = storage.saveAll(initial);
+        assertEquals(1_000, ids.size());
+        assertTrue(ids.stream().allMatch(id -> id > 0));
+        assertEquals(1_000, storage.loadAll().size());
+
+        List<GraveRecord> updates = new ArrayList<>();
+        for (int i = 0; i < initial.size(); i++) {
+            GraveRecord record = initial.get(i);
+            updates.add(new GraveRecord(
+                    ids.get(i),
+                    record.owner(),
+                    record.ownerName(),
+                    record.location(),
+                    new byte[]{(byte) (i + 1)},
+                    record.dataVersion(),
+                    10_000 + i,
+                    record.createdAt(),
+                    null,
+                    null
+            ));
+        }
+
+        assertEquals(ids, storage.saveAll(updates));
+        List<GraveRecord> reloaded = storage.loadAll();
+        assertEquals(1_000, reloaded.size());
+        assertEquals(10_000, reloaded.getFirst().storedXP());
+        assertEquals(10_999, reloaded.getLast().storedXP());
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.slyph.clovergraves.commands.subcommands;
 import com.slyph.clovergraves.AxGraves;
 import com.slyph.clovergraves.config.GraveSettings;
 import com.slyph.clovergraves.grave.Grave;
+import com.slyph.clovergraves.grave.GraveLifecycleService;
 import com.slyph.clovergraves.grave.SpawnedGraves;
 import com.slyph.clovergraves.listeners.DeathListener;
 import com.slyph.clovergraves.schedulers.CloverScheduler;
@@ -35,6 +36,7 @@ public enum Reload {
         DeathListener.reload();
         UpdateNotifier.reload();
         SaveGraves.start();
+        GraveLifecycleService.get().reload();
 
         for (Grave grave : SpawnedGraves.getGraves()) {
             CloverScheduler.get().runAt(grave.getLocation(), grave::updateHologram);
