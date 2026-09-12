@@ -2,9 +2,13 @@ package com.slyph.clovergraves.compat;
 
 import com.slyph.clovergraves.AxGraves;
 import com.slyph.clovergraves.config.HologramSettings;
+import com.slyph.clovergraves.grave.Grave;
+import com.slyph.clovergraves.grave.SpawnedGraves;
 import com.slyph.clovergraves.grave.hologram.TextDisplayGraveHologram;
+import com.slyph.clovergraves.storage.EndReason;
 import com.slyph.clovergraves.storage.ItemSerialization;
 import com.slyph.clovergraves.utils.CloverLogger;
+import com.slyph.clovergraves.utils.InventoryOrderSnapshot;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
@@ -32,6 +36,7 @@ public final class CardboardCompatibilitySelfTest {
     public static void run() {
         List<Entity> spawned = new ArrayList<>();
         TextDisplayGraveHologram hologram = null;
+        Grave lifecycleGrave = null;
         try {
             if (!Bukkit.isPrimaryThread()) throw new IllegalStateException("compatibility test is not on the server thread");
             World world = Bukkit.getWorlds().stream().findFirst().orElseThrow();
@@ -102,12 +107,58 @@ public final class CardboardCompatibilitySelfTest {
                 if (!hologram.isValid()) throw new IllegalStateException("TextDisplay hologram became invalid after timer update");
             }
 
+            lifecycleGrave = new Grave(
+                    location.clone().add(2, 0, 0),
+                    Bukkit.getOfflinePlayer(UUID.randomUUID()),
+                    List.of(new ItemStack(Material.STONE)),
+                    0,
+                    System.currentTimeMillis(),
+                    InventoryOrderSnapshot.EMPTY
+            );
+            SpawnedGraves.addGrave(lifecycleGrave);
+
+            ArmorStand firstMarker = lifecycleGrave.getEntity();
+            if (firstMarker == null) throw new IllegalStateException("grave marker did not spawn in a loaded chunk");
+            if (SpawnedGraves.getGrave(firstMarker.getUniqueId()) != lifecycleGrave) {
+                throw new IllegalStateException("grave marker was not registered in the entity index");
+            }
+
+            UUID firstMarkerId = firstMarker.getUniqueId();
+            lifecycleGrave.despawnVisuals();
+            if (lifecycleGrave.getEntity() != null || lifecycleGrave.getHologram() != null) {
+                throw new IllegalStateException("grave visuals were not cleared");
+            }
+            if (SpawnedGraves.getGrave(firstMarkerId) != null) {
+                throw new IllegalStateException("despawned grave marker remained in the entity index");
+            }
+
+            lifecycleGrave.spawnVisuals();
+            ArmorStand secondMarker = lifecycleGrave.getEntity();
+            if (secondMarker == null || secondMarker.getUniqueId().equals(firstMarkerId)) {
+                throw new IllegalStateException("grave visuals did not respawn with a fresh marker");
+            }
+            if (SpawnedGraves.getGrave(secondMarker.getUniqueId()) != lifecycleGrave) {
+                throw new IllegalStateException("respawned grave marker was not rebound in the entity index");
+            }
+
+            lifecycleGrave.contents().drainItems();
+            lifecycleGrave.remove(EndReason.REMOVED);
+            if (!lifecycleGrave.isRemoved()) throw new IllegalStateException("test grave was not removed");
+            lifecycleGrave = null;
+
             Bukkit.createInventory(null, 9, "CloverGraves Test");
             CloverLogger.info("CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_PASS");
         } catch (Throwable throwable) {
             CloverLogger.error("CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_FAIL", throwable);
             Bukkit.getPluginManager().disablePlugin(AxGraves.getInstance());
         } finally {
+            if (lifecycleGrave != null) {
+                try {
+                    lifecycleGrave.contents().drainItems();
+                    lifecycleGrave.remove(EndReason.REMOVED);
+                } catch (Throwable ignored) {
+                }
+            }
             if (hologram != null) {
                 try {
                     hologram.remove();
