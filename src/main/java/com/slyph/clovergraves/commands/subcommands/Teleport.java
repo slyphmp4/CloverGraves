@@ -113,11 +113,9 @@ public enum Teleport {
 
     @Nullable
     private Location resolveTarget(Player sender, World world, Double x, Double y, Double z) {
+        UUID owner = sender.getUniqueId();
         if (world == null || x == null || y == null || z == null) {
-            Grave grave = SpawnedGraves.getGraves().stream()
-                    .filter(value -> value.getPlayer().getUniqueId().equals(sender.getUniqueId()))
-                    .min(java.util.Comparator.comparingLong(Grave::getSpawned).reversed())
-                    .orElse(null);
+            Grave grave = SpawnedGraves.getLatestGrave(owner);
             if (grave == null) {
                 MESSAGEUTILS.sendLang(sender, "grave-list.no-graves");
                 return null;
@@ -126,8 +124,7 @@ public enum Teleport {
         }
 
         Location requested = new Location(world, x, y, z);
-        Optional<Grave> grave = SpawnedGraves.getGraves().stream()
-                .filter(value -> value.getPlayer().getUniqueId().equals(sender.getUniqueId()))
+        Optional<Grave> grave = SpawnedGraves.getGraves(owner).stream()
                 .filter(value -> Objects.equals(value.getLocation().getWorld(), requested.getWorld()))
                 .filter(value -> value.getLocation().distanceSquared(requested) < 1)
                 .findFirst();
