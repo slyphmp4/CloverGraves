@@ -39,18 +39,26 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public final class AxGraves extends JavaPlugin {
+    private static final long SHUTDOWN_STORAGE_TIMEOUT_SECONDS = 10L;
+
     private static AxGraves instance;
     public static CloverConfig CONFIG;
     public static CloverConfig LANG;
     public static MessageService MESSAGEUTILS;
     public static ScheduledExecutorService EXECUTOR;
     private static boolean debugMode;
+
+    private volatile boolean shuttingDown;
 
     @NotNull
     public static AxGraves getInstance() {
@@ -69,6 +77,7 @@ public final class AxGraves extends JavaPlugin {
     @Override
     public void onEnable() {
         instance = this;
+        shuttingDown = false;
         CloverLogger.bind(getLogger());
         CloverScheduler.init(this);
 
@@ -99,13 +108,10 @@ public final class AxGraves extends JavaPlugin {
         CommandManager.load();
         PlaceholderHook.register();
 
-        GraveStorage storage = createStorage();
-        SpawnedGraves.setStorage(storage);
-        if (CONFIG.getBoolean("save-graves.enabled", true)) {
-            for (GraveRecord record : storage.loadAll()) restoreGrave(record);
-        }
-
+        SpawnedGraves.setStorage(null);
+        EXECUTOR.execute(this::bootstrapStorage);
         SaveGraves.start();
+
         UpdateNotifier.init(CONFIG);
         if (CONFIG.getBoolean("update-notifier.enabled", true)) new UpdateNotifier();
 
@@ -119,6 +125,21 @@ public final class AxGraves extends JavaPlugin {
         if (Boolean.getBoolean("clovergraves.compatTest")) {
             Bukkit.getScheduler().runTaskLater(this, CardboardCompatibilitySelfTest::run, 20L);
         }
+    }
+
+    private void bootstrapStorage() {
+        GraveStorage storage = createStorage();
+        List<GraveRecord> records = CONFIG.getBoolean("save-graves.enabled", true)
+                ? storage.loadAll()
+                : List.of();
+
+        SpawnedGraves.setStorage(storage);
+        if (shuttingDown || records.isEmpty()) return;
+
+        CloverScheduler.get().run(() -> {
+            if (shuttingDown) return;
+            for (GraveRecord record : records) restoreGrave(record);
+        });
     }
 
     @NotNull
@@ -177,7 +198,7 @@ public final class AxGraves extends JavaPlugin {
         return new JdbcConfig(JdbcConfig.Type.MYSQL, url, username, password, tablePrefix);
     }
 
-    private void restoreGrave(GraveRecord record) {
+    private void restoreGrave(@NotNull GraveRecord record) {
         Location location = LocationCodec.deserialize(record.location());
         if (location == null || location.getWorld() == null) {
             CloverLogger.warn("skipping a saved grave for {}; its world is not loaded", record.owner());
@@ -185,13 +206,15 @@ public final class AxGraves extends JavaPlugin {
         }
 
         CloverScheduler.get().runAt(location, () -> {
+            if (shuttingDown) return;
             try {
                 OfflinePlayer owner = Bukkit.getOfflinePlayer(record.owner());
                 ItemStack[] items = ItemSerialization.deserialize(record.items());
                 Grave grave = new Grave(location, owner, Arrays.asList(items), record.storedXP(), record.createdAt(), InventoryOrderSnapshot.EMPTY);
                 grave.assignStorageId(record.id());
+                grave.markPersisted(grave.snapshot().version());
                 SpawnedGraves.addGrave(grave);
-            } catch (Exception ex) {
+            } catch (RuntimeException ex) {
                 CloverLogger.error("failed to restore a saved grave for {}", record.owner(), ex);
             }
         });
@@ -199,18 +222,19 @@ public final class AxGraves extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        shuttingDown = true;
         SaveGraves.stop();
-        GraveStorage storage = SpawnedGraves.storage();
-        boolean persist = CONFIG != null && CONFIG.getBoolean("save-graves.enabled", true) && storage != null;
+        boolean persistRequested = CONFIG != null && CONFIG.getBoolean("save-graves.enabled", true);
 
-        for (Grave grave : SpawnedGraves.getGraves()) {
-            if (!persist) {
+        for (Grave grave : List.copyOf(SpawnedGraves.getGraves())) {
+            if (!persistRequested) {
                 grave.remove(EndReason.SHUTDOWN);
                 continue;
             }
+
             try {
                 grave.contents().refreshSnapshot();
-            } catch (Exception ex) {
+            } catch (RuntimeException ex) {
                 CloverLogger.error("failed to refresh a grave snapshot during shutdown", ex);
             }
             if (grave.getEntity() != null) grave.getEntity().remove();
@@ -218,27 +242,45 @@ public final class AxGraves extends JavaPlugin {
         }
 
         GraveLifecycleService.get().shutdown();
+        finishStorageShutdown(persistRequested);
+        CloverScheduler.get().shutdown();
+        instance = null;
+    }
 
-        if (persist) SaveGraves.flushDirty();
-        if (storage != null) {
+    private void finishStorageShutdown(boolean persistRequested) {
+        if (EXECUTOR == null) return;
+
+        Future<?> finalizer = EXECUTOR.submit(() -> {
+            GraveStorage storage = SpawnedGraves.storage();
+            if (storage == null) return;
+
+            if (persistRequested) SaveGraves.flushDirty();
             try {
                 storage.close();
-            } catch (Exception ex) {
+            } catch (RuntimeException ex) {
                 CloverLogger.error("failed to close grave storage", ex);
+            } finally {
+                SpawnedGraves.setStorage(null);
             }
-        }
+        });
 
-        if (EXECUTOR != null) {
+        try {
+            finalizer.get(SHUTDOWN_STORAGE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            CloverLogger.warn("interrupted while waiting for the final grave storage flush");
+        } catch (ExecutionException ex) {
+            CloverLogger.error("grave storage shutdown failed", ex.getCause());
+        } catch (TimeoutException ex) {
+            CloverLogger.error("grave storage shutdown exceeded {} seconds", SHUTDOWN_STORAGE_TIMEOUT_SECONDS);
+        } finally {
             EXECUTOR.shutdown();
             try {
-                if (!EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) EXECUTOR.shutdownNow();
+                if (!EXECUTOR.awaitTermination(1, TimeUnit.SECONDS)) EXECUTOR.shutdownNow();
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
                 EXECUTOR.shutdownNow();
             }
         }
-
-        CloverScheduler.get().shutdown();
-        instance = null;
     }
 }
