@@ -20,6 +20,7 @@ import com.slyph.clovergraves.storage.GraveRecord;
 import com.slyph.clovergraves.storage.GraveStorage;
 import com.slyph.clovergraves.storage.ItemSerialization;
 import com.slyph.clovergraves.storage.JdbcConfig;
+import com.slyph.clovergraves.storage.JdbcPoolConfig;
 import com.slyph.clovergraves.storage.JsonGraveStorage;
 import com.slyph.clovergraves.storage.LocationCodec;
 import com.slyph.clovergraves.storage.SqlGraveStorage;
@@ -134,7 +135,12 @@ public final class AxGraves extends JavaPlugin {
                 case "MYSQL" -> mysqlConfig(tablePrefix);
                 default -> h2Config(tablePrefix);
             };
-            SqlGraveStorage sql = new SqlGraveStorage(jdbc, historyEnabled, keepPerPlayer, keepDays);
+            JdbcPoolConfig pool = new JdbcPoolConfig(
+                    CONFIG.getInt("storage.mysql.pool.maximum-pool-size", 4),
+                    CONFIG.getInt("storage.mysql.pool.minimum-idle", 1),
+                    CONFIG.getInt("storage.mysql.pool.connection-timeout-millis", 5_000)
+            );
+            SqlGraveStorage sql = new SqlGraveStorage(jdbc, pool, historyEnabled, keepPerPlayer, keepDays);
             sql.init();
             StorageMigration.migrateIfNeeded(getDataFolder(), sql);
             return sql;
