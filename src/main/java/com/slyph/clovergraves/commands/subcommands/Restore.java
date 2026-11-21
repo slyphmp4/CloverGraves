@@ -46,6 +46,11 @@ public enum Restore {
 
     private void validateAndClaim(CommandSender sender, OfflinePlayer player, String displayName, long id,
                                   GraveStorage storage, Optional<GraveRecord> entryOpt) {
+        if (!sender.hasPermission("axgraves.restore")) {
+            MESSAGEUTILS.sendLang(sender, "commands.no-permission");
+            return;
+        }
+
         if (entryOpt.isEmpty() || !entryOpt.get().owner().equals(player.getUniqueId())) {
             MESSAGEUTILS.sendLang(sender, "restore.not-found", Map.of("%id%", String.valueOf(id), "%player%", displayName));
             return;
@@ -72,6 +77,12 @@ public enum Restore {
 
     private void spawn(CommandSender sender, OfflinePlayer player, String displayName, long id,
                        GraveStorage storage, GraveRecord entry, Location location) {
+        if (!sender.hasPermission("axgraves.restore")) {
+            releaseClaim(storage, id);
+            MESSAGEUTILS.sendLang(sender, "commands.no-permission");
+            return;
+        }
+
         Grave grave;
         try {
             ItemStack[] items = ItemSerialization.deserialize(entry.items());
@@ -79,13 +90,7 @@ public enum Restore {
                     System.currentTimeMillis(), InventoryOrderSnapshot.EMPTY);
         } catch (Exception ex) {
             CloverLogger.error("failed to construct restored grave {}", id, ex);
-            AxGraves.EXECUTOR.execute(() -> {
-                try {
-                    storage.releaseRestoreClaim(id);
-                } catch (RuntimeException rollback) {
-                    CloverLogger.error("failed to release history claim {}; manual recovery may be needed", id, rollback);
-                }
-            });
+            releaseClaim(storage, id);
             MESSAGEUTILS.sendLang(sender, "restore.failed", Map.of("%id%", String.valueOf(id)));
             return;
         }
@@ -106,4 +111,14 @@ public enum Restore {
             MESSAGEUTILS.sendLang(sender, "restore.failed", Map.of("%id%", String.valueOf(id)));
         }
     }
+    private void releaseClaim(GraveStorage storage, long id) {
+        AxGraves.EXECUTOR.execute(() -> {
+            try {
+                storage.releaseRestoreClaim(id);
+            } catch (RuntimeException rollback) {
+                CloverLogger.error("failed to release history claim {}; manual recovery may be needed", id, rollback);
+            }
+        });
+    }
+
 }

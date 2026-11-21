@@ -88,6 +88,10 @@ public class DeathListener implements Listener {
         if (debug) CloverLogger.info("[{}] creating grave", player.getName());
         if (disabledWorlds.contains(player.getWorld().getName())) return;
         if (!player.hasPermission("axgraves.allowgraves")) return;
+        if (SpawnedGraves.storage() == null) {
+            if (debug) CloverLogger.warn("[{}] grave storage is not ready; preserving vanilla death drops", player.getName());
+            return;
+        }
         if (player.getLastDamageCause() != null
                 && blacklistedDeathCauses.contains(player.getLastDamageCause().getCause().name())) return;
 

@@ -263,6 +263,19 @@ public class Grave {
         GraveLifecycleService.get().markViewOpen(this);
     }
 
+    public boolean canLoot(@NotNull Player viewer) {
+        if (removed.get() || viewer.getGameMode() == GameMode.SPECTATOR) return false;
+        GraveSettings settings = GraveSettings.current();
+        if (!viewer.getWorld().equals(location.getWorld())) return false;
+        if (viewer.getLocation().distanceSquared(location) > settings.interactRadiusSquared()) return false;
+
+        boolean owner = viewer.getUniqueId().equals(player.getUniqueId());
+        boolean administrator = viewer.hasPermission("axgraves.admin");
+        if (settings.interactOnlyOwn() && !owner && !administrator) return false;
+
+        return owner || administrator || viewer.hasPermission("axgraves.protection.bypass") || !isProtected(settings);
+    }
+
     private boolean acceptInteraction(@NotNull Player opener) {
         long now = System.nanoTime();
         Long previous = lastInteractionAt.put(opener.getUniqueId(), now);

@@ -92,6 +92,22 @@ public enum Teleport {
     }
 
     private void completeTeleport(Player sender, UUID uuid, Location target, double cost, String symbol) {
+        if (!sender.isOnline() || !sender.hasPermission("axgraves.tp")) {
+            MESSAGEUTILS.sendLang(sender, "commands.no-permission");
+            return;
+        }
+
+        if (!sender.hasPermission("axgraves.tp.bypass")) {
+            boolean stillAllowed = SpawnedGraves.getGraves(uuid).stream()
+                    .filter(grave -> !grave.isRemoved())
+                    .anyMatch(grave -> Objects.equals(grave.getLocation().getWorld(), target.getWorld())
+                            && grave.getLocation().distanceSquared(target) < 1.0);
+            if (!stillAllowed) {
+                MESSAGEUTILS.sendLang(sender, "commands.no-permission");
+                return;
+            }
+        }
+
         if (cost > 0) {
             if (!EconomyHook.has(sender, cost) || !EconomyHook.withdraw(sender, cost)) {
                 MESSAGEUTILS.sendLang(sender, "teleport.cost-insufficient", Map.of(
