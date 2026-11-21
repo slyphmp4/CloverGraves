@@ -60,6 +60,7 @@ storage:
     database: axgraves
     username: root
     password: ""
+    ssl-mode: REQUIRED
     pool:
       maximum-pool-size: 4
       minimum-idle: 1

@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "com.slyph"
-version = "2.1.2"
+version = "2.2.0"
 
 repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
@@ -16,7 +16,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:26.2.build.110-stable")
+    compileOnly("io.papermc.paper:paper-api:26.3.build.257-stable")
     compileOnly("com.github.MilkBowl:VaultAPI:1.7") {
         isTransitive = false
     }
@@ -30,10 +30,10 @@ dependencies {
         exclude(group = "org.slf4j", module = "slf4j-api")
     }
 
-    testImplementation(platform("org.junit:junit-bom:5.14.0"))
+    testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testImplementation("io.papermc.paper:paper-api:26.2.build.110-stable")
+    testImplementation("io.papermc.paper:paper-api:26.3.build.257-stable")
     testImplementation("com.github.MilkBowl:VaultAPI:1.7") {
         isTransitive = false
     }

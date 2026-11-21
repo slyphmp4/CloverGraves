@@ -1,7 +1,7 @@
 name: CloverGraves
 version: '${version}'
 main: com.slyph.clovergraves.AxGraves
-api-version: '26.2'
+api-version: '26.3'
 authors: [slyph]
 softdepend: [Vault, PlaceholderAPI]
 
