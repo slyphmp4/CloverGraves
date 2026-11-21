@@ -49,6 +49,15 @@ jobs:
           set -euo pipefail
           JAR="$(find build/libs -maxdepth 1 -name 'CloverGraves-*.jar' ! -name '*-unshaded.jar' | head -n 1)"
           test -n "$JAR"
+          JAR_CLASSES="$(mktemp)"
+          jar tf "$JAR" > "$JAR_CLASSES"
+          for REQUIRED in org/h2/Driver.class org/sqlite/JDBC.class com/mysql/cj/jdbc/Driver.class; do
+            if ! grep -Fxq "$REQUIRED" "$JAR_CLASSES"; then
+              echo "Missing required JDBC driver in shaded release jar: $REQUIRED"
+              exit 1
+            fi
+          done
+          rm -f "$JAR_CLASSES"
           if jar tf "$JAR" | grep -E 'com/artillexstudios/axapi|org/bukkit/craftbukkit|net/minecraft'; then
             echo 'Forbidden AxAPI/NMS/CraftBukkit classes found in release jar.'
             exit 1
@@ -80,7 +89,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          JAR="$(find build/libs -maxdepth 1 -name 'CloverGraves-*.jar' ! -name '*-plain.jar' -print -quit)"
+          JAR="$(find build/libs -maxdepth 1 -name 'CloverGraves-*.jar' ! -name '*-unshaded.jar' ! -name '*-plain.jar' -print -quit)"
           test -n "$JAR"
           mkdir -p cardboard-src/run/plugins
           cp "$JAR" cardboard-src/run/plugins/CloverGraves.jar
@@ -123,7 +132,7 @@ jobs:
             if grep -q 'CLOVERGRAVES_CARDBOARD_26_3_SELFTEST_FAIL' "$LOG" 2>/dev/null; then
               break
             fi
-            if grep -Eq 'Error occurred while (enabling|loading) CloverGraves|Could not load .*CloverGraves|Mixin apply failed|NoClassDefFoundError' "$LOG" 2>/dev/null; then
+            if grep -Eq 'grave storage could not be loaded|Error occurred while (enabling|loading) CloverGraves|Could not load .*CloverGraves|Mixin apply failed|NoClassDefFoundError' "$LOG" 2>/dev/null; then
               break
             fi
             if grep -q 'CLOVERGRAVES_CARDBOARD_26_3_SELFTEST_PASS' "$LOG" 2>/dev/null && grep -q 'Done (' "$LOG" 2>/dev/null; then
