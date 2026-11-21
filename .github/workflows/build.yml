@@ -74,6 +74,7 @@ jobs:
           test -n "$CARDBOARD_JAR"
           mkdir -p smoke/mods
           cp "$CARDBOARD_JAR" smoke/mods/Cardboard.jar
+          cp cardboard-src/libs/iCommon-Fabric-26.2.jar smoke/mods/iCommon.jar
 
       - name: Smoke test on slyph Cardboard 26.3 with TextDisplay
         shell: bash
@@ -87,7 +88,7 @@ jobs:
           curl -fsSL -o smoke/mods/fabric-api.jar 'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.166.2+26.3/fabric-api-0.166.2+26.3.jar'
 
           cd smoke
-          java -jar ../fabric-installer.jar server -mcversion 26.3 -loader 0.19.5 -downloadMinecraft
+          java -jar ../fabric-installer.jar server -mcversion 26.3 -loader 0.20.1 -downloadMinecraft
           printf 'eula=true\n' > eula.txt
           cat > server.properties <<'PROPERTIES'
           online-mode=false
