@@ -58,11 +58,11 @@ jobs:
             exit 1
           fi
 
-      - name: Build fixed slyph Cardboard 26.2
+      - name: Build fixed slyph Cardboard 26.3
         shell: bash
         run: |
           set -euo pipefail
-          CARDBOARD_SHA='5b62d59716f5a7d6dc0fa780ea7ca527e79272a5'
+          CARDBOARD_SHA='944000d2a13f1decccb55817484567f9d0dcc230'
           git clone --filter=blob:none --no-checkout https://github.com/slyphmp4/Cardboard.git cardboard-src
           git -C cardboard-src fetch --depth 1 origin "$CARDBOARD_SHA"
           git -C cardboard-src checkout --detach FETCH_HEAD
@@ -75,7 +75,7 @@ jobs:
           mkdir -p smoke/mods
           cp "$CARDBOARD_JAR" smoke/mods/Cardboard.jar
 
-      - name: Smoke test on slyph Cardboard 26.2 with TextDisplay
+      - name: Smoke test on slyph Cardboard 26.3 with TextDisplay
         shell: bash
         run: |
           set -euo pipefail
@@ -84,10 +84,10 @@ jobs:
           cp "$JAR" smoke/plugins/CloverGraves.jar
 
           curl -fsSL -o fabric-installer.jar 'https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.1.2/fabric-installer-1.1.2.jar'
-          curl -fsSL -o smoke/mods/fabric-api.jar 'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.156.0+26.2/fabric-api-0.156.0+26.2.jar'
+          curl -fsSL -o smoke/mods/fabric-api.jar 'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.166.2+26.3/fabric-api-0.166.2+26.3.jar'
 
           cd smoke
-          java -jar ../fabric-installer.jar server -mcversion 26.2 -loader 0.19.3 -downloadMinecraft
+          java -jar ../fabric-installer.jar server -mcversion 26.3 -loader 0.19.5 -downloadMinecraft
           printf 'eula=true\n' > eula.txt
           cat > server.properties <<'PROPERTIES'
           online-mode=false
@@ -107,11 +107,11 @@ jobs:
 
           PASS=0
           for i in $(seq 1 180); do
-            if grep -q 'CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_PASS' server.log 2>/dev/null; then
+            if grep -q 'CLOVERGRAVES_CARDBOARD_26_3_SELFTEST_PASS' server.log 2>/dev/null; then
               PASS=1
               break
             fi
-            if grep -q 'CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_FAIL' server.log 2>/dev/null; then
+            if grep -q 'CLOVERGRAVES_CARDBOARD_26_3_SELFTEST_FAIL' server.log 2>/dev/null; then
               break
             fi
             if ! kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -126,7 +126,7 @@ jobs:
           cat server.log
 
           if [ "$PASS" -ne 1 ]; then
-            echo 'Cardboard 26.2 TextDisplay self-test did not pass.'
+            echo 'Cardboard 26.3 TextDisplay self-test did not pass.'
             exit 1
           fi
           if grep -E 'Cannot spawn an entity for org\.bukkit\.entity\.TextDisplay|ClassCastException.*TextDisplay|AbstractMethodError|NoSuchMethodError|UnsupportedOperationException|Error occurred while enabling CloverGraves|Could not load .*CloverGraves|NoClassDefFoundError.*(CloverGraves|artillexstudios)' server.log; then
@@ -144,7 +144,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/rewrite' && github.event.head_commit.message == 'Release CloverGraves 2.1.2'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/rewrite' && github.event.head_commit.message == 'Release CloverGraves 2.2.0'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -158,14 +158,14 @@ jobs:
           name: CloverGraves-${{ github.sha }}
           path: release
 
-      - name: Publish CloverGraves 2.1.2
+      - name: Publish CloverGraves 2.2.0
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG='v2.1.2'
-          TARGET='release/CloverGraves-2.1.2.jar'
+          TAG='v2.2.0'
+          TARGET='release/CloverGraves-2.2.0.jar'
           JAR="$(find release -maxdepth 1 -name 'CloverGraves-*.jar' ! -name '*-unshaded.jar' | head -n 1)"
           test -n "$JAR"
           if [ "$JAR" != "$TARGET" ]; then
@@ -174,40 +174,36 @@ jobs:
           sha256sum "$TARGET" | sed 's#release/##' > release/SHA256SUMS.txt
 
           cat > release-notes.md <<'NOTES'
-          CloverGraves 2.1.2 fixes grave inventory opening on Cardboard 26.2 and strengthens the runtime compatibility test for the exact production GUI path.
+          CloverGraves 2.2.0 ports the plugin to Minecraft/Paper/Cardboard 26.3 and improves persistence and GUI safety.
 
-          ### Fixes
-          - Restored the Cardboard-compatible `Bukkit.createInventory(..., String)` path for grave inventories.
-          - Added an explicit null guard so a broken inventory implementation produces a clear compatibility error instead of a later `NullPointerException`.
-          - Reworked the Cardboard self-test to create a real `GraveInventoryHolder`, call `GraveContents.openFor()`, populate the inventory, and verify the resulting GUI contents.
-          - Prevents the previous false-positive smoke test where `Bukkit.createInventory(...)` could return `null` without failing CI.
-
-          ### Verification
-          - `./gradlew clean build` and tests must pass before publication.
-          - The shaded JAR audit must pass.
-          - The pinned Cardboard 26.2 build must compile successfully.
-          - The runtime smoke-test must produce `CLOVERGRAVES_CARDBOARD_26_2_SELFTEST_PASS` using the same grave inventory opening path used in production.
+          ### Changes
+          - Targets Paper API 26.3 build 257 stable, Java 25, Gradle 9.9.2 and JUnit 6.1.3.
+          - Revalidates grave ownership and protection on inventory actions.
+          - Stops silently switching from SQL storage to JSON if database initialization fails.
+          - Adds explicit JSON storage mode and encrypted MySQL connections (TLS required).
+          - Updates Cardboard 26.3 smoke tests for TextDisplay, native grave inventory and item serialization.
 
           ### Compatibility
-          - Minecraft / Paper / Cardboard: 26.2
-          - Bukkit api-version: 26.2
+          - Minecraft/Paper/Cardboard: 26.3
+          - Bukkit api-version: 26.3
           - Java: 25
-          - Paper API: 26.2 build 110 stable
-          - Cardboard CI target: `slyphmp4/Cardboard` commit `5b62d59716f5a7d6dc0fa780ea7ca527e79272a5`
 
           ### Upgrade notes
-          - Replace `CloverGraves-2.1.1.jar` with `CloverGraves-2.1.2.jar` while the server is stopped.
-          - Configuration, storage schema, permissions and command aliases are unchanged.
-          - `SHA256SUMS.txt` contains the release JAR checksum.
+          - Back up plugins/CloverGraves before replacing the plugin.
+          - Existing database tables, command aliases and permission nodes are unchanged.
+          - MySQL now requires TLS; configure the database server accordingly.
+          - For verified MySQL server identity, configure ssl-mode: VERIFY_IDENTITY and trusted certificates.
+          - Replace the old JAR while the server is stopped.
+          - SHA256SUMS.txt provides the release JAR checksum.
           NOTES
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" "$TARGET" release/SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
-            gh release edit "$TAG" --title 'CloverGraves 2.1.2' --notes-file release-notes.md --latest --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --title 'CloverGraves 2.2.0' --notes-file release-notes.md --latest --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$TAG" "$TARGET" release/SHA256SUMS.txt \
               --target "$GITHUB_SHA" \
-              --title 'CloverGraves 2.1.2' \
+              --title 'CloverGraves 2.2.0' \
               --notes-file release-notes.md \
               --latest \
               --repo "$GITHUB_REPOSITORY"

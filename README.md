@@ -7,7 +7,7 @@
 [![Build](https://github.com/slyphmp4/CloverGraves/actions/workflows/build.yml/badge.svg?branch=rewrite)](https://github.com/slyphmp4/CloverGraves/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/slyphmp4/CloverGraves?style=flat-square)](https://github.com/slyphmp4/CloverGraves/releases)
 [![Java](https://img.shields.io/badge/Java-25-555?style=flat-square)](https://openjdk.org/)
-[![Paper](https://img.shields.io/badge/Paper-26.2-555?style=flat-square)](https://papermc.io/)
+[![Paper](https://img.shields.io/badge/Paper-26.3-555?style=flat-square)](https://papermc.io/)
 [![License](https://img.shields.io/badge/license-MIT-555?style=flat-square)](LICENSE)
 
 [Releases](https://github.com/slyphmp4/CloverGraves/releases) · [Builds](https://github.com/slyphmp4/CloverGraves/actions) · [Issues](https://github.com/slyphmp4/CloverGraves/issues)
@@ -22,7 +22,7 @@ CloverGraves keeps a death recoverable without turning it into a permanent keep-
 
 When a player dies, configured inventory contents and experience are captured into a persistent grave. The grave is represented by a protected player-head marker and a native `TextDisplay` hologram, can survive server restarts, and disappears once its contents are recovered or its lifetime expires.
 
-The project is designed around Paper 26.2 and Cardboard compatibility without runtime NMS, CraftBukkit internals or an AxAPI dependency.
+The project is designed around Paper 26.3 and Cardboard compatibility without runtime NMS, CraftBukkit internals or an AxAPI dependency.
 
 ### At a glance
 
@@ -44,14 +44,14 @@ The project is designed around Paper 26.2 and Cardboard compatibility without ru
 
 | Component | Version / notes |
 | --- | --- |
-| Minecraft / Paper build target | **26.2** |
+| Minecraft / Paper build target | **26.3** |
 | Java | **25** |
-| Paper API build | `26.2.build.110-stable` |
-| Bukkit `api-version` | `26.2` |
+| Paper API build | `26.3.build.257-stable` |
+| Bukkit `api-version` | `26.3` |
 | PlaceholderAPI | Optional, built against **2.12.3** |
 | Vault | Optional, used for teleport costs |
 
-CloverGraves is compiled, declared and tested for Minecraft/Paper/Cardboard 26.2. The plugin does not lower `api-version` to claim unsupported backwards compatibility.
+CloverGraves targets Minecraft/Paper/Cardboard 26.3. The plugin does not lower `api-version` to claim unsupported backwards compatibility.
 
 The CI pipeline also includes Cardboard-oriented compatibility checks for the modern runtime features CloverGraves uses, including `TextDisplay` behavior and the real grave inventory opening path.
 
@@ -59,7 +59,7 @@ The CI pipeline also includes Cardboard-oriented compatibility checks for the mo
 
 ## Installation
 
-1. Download `CloverGraves-2.1.2.jar` from [Releases](https://github.com/slyphmp4/CloverGraves/releases), or build the project yourself.
+1. Download `CloverGraves-2.2.0.jar` from [Releases](https://github.com/slyphmp4/CloverGraves/releases), or build the project yourself.
 2. Put the JAR into the server's `plugins/` directory.
 3. Start the server once to generate `config.yml` and `messages.yml`.
 4. Review grave lifetime, storage, protection and teleport settings.
@@ -281,6 +281,8 @@ storage:
   table-prefix: "axgraves_"
   flush-interval-seconds: 15
 ```
+
+An SQL initialization failure disables the plugin rather than silently falling back to a different storage backend. MySQL requires TLS (`storage.mysql.ssl-mode: REQUIRED` by default); use `VERIFY_IDENTITY` with a trusted certificate when possible. Explicit `storage.type: JSON` is available for administrators intentionally using JSON storage.
 
 Supported persistent backends include:
 
