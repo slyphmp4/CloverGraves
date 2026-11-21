@@ -20,6 +20,10 @@ public class GraveInventoryListener implements Listener {
     public void onClick(@NotNull InventoryClickEvent event) {
         Grave grave = graveOf(event.getView());
         if (grave == null) return;
+        if (!(event.getWhoClicked() instanceof Player player) || !grave.canLoot(player)) {
+            event.setCancelled(true);
+            return;
+        }
 
         int topSize = event.getView().getTopInventory().getSize();
         boolean clickedTop = event.getRawSlot() >= 0 && event.getRawSlot() < topSize;
@@ -44,14 +48,17 @@ public class GraveInventoryListener implements Listener {
         boolean canChangeTop = clickedTop || action == InventoryAction.COLLECT_TO_CURSOR;
         if (!canChangeTop) return;
 
-        Player looter = event.getWhoClicked() instanceof Player player ? player : null;
-        syncSoon(grave, looter);
+        syncSoon(grave, player);
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onDrag(@NotNull InventoryDragEvent event) {
         Grave grave = graveOf(event.getView());
         if (grave == null) return;
+        if (!(event.getWhoClicked() instanceof Player player) || !grave.canLoot(player)) {
+            event.setCancelled(true);
+            return;
+        }
 
         int topSize = event.getView().getTopInventory().getSize();
         if (event.getRawSlots().stream().anyMatch(slot -> slot >= 0 && slot < topSize)) {

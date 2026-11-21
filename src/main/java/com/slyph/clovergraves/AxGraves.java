@@ -121,10 +121,10 @@ public final class AxGraves extends JavaPlugin {
         if (CONFIG.getBoolean("update-notifier.enabled", true)) new UpdateNotifier();
 
         String server = (Bukkit.getName() + " " + Bukkit.getVersion()).toLowerCase(Locale.ROOT);
-        if (server.contains("cardboard") && "26.2".equals(Bukkit.getMinecraftVersion())) {
-            CloverLogger.info("Cardboard 26.2 detected; CloverGraves is using native Bukkit TextDisplay holograms");
-        } else if (!"26.2".equals(Bukkit.getMinecraftVersion())) {
-            CloverLogger.warn("CloverGraves targets Minecraft/Cardboard 26.2; detected Minecraft {}", Bukkit.getMinecraftVersion());
+        if (server.contains("cardboard") && "26.3".equals(Bukkit.getMinecraftVersion())) {
+            CloverLogger.info("Cardboard 26.3 detected; CloverGraves is using native Bukkit TextDisplay holograms");
+        } else if (!"26.3".equals(Bukkit.getMinecraftVersion())) {
+            CloverLogger.warn("CloverGraves targets Minecraft/Cardboard 26.3; detected Minecraft {}", Bukkit.getMinecraftVersion());
         }
 
         if (Boolean.getBoolean("clovergraves.compatTest")) {
@@ -146,6 +146,7 @@ public final class AxGraves extends JavaPlugin {
                 CONFIG.getString("storage.mysql.database", "axgraves"),
                 CONFIG.getString("storage.mysql.username", "root"),
                 CONFIG.getString("storage.mysql.password", ""),
+                CONFIG.getString("storage.mysql.ssl-mode", "REQUIRED"),
                 new JdbcPoolConfig(
                         CONFIG.getInt("storage.mysql.pool.maximum-pool-size", 4),
                         CONFIG.getInt("storage.mysql.pool.minimum-idle", 1),
@@ -180,29 +181,37 @@ public final class AxGraves extends JavaPlugin {
 
     @NotNull
     private GraveStorage createStorage(@NotNull StorageSettings settings) {
-        SqlGraveStorage sql = null;
-        try {
-            JdbcConfig jdbc = switch (settings.type()) {
-                case "SQLITE" -> sqliteConfig(settings.tablePrefix());
-                case "MYSQL" -> mysqlConfig(settings);
-                default -> h2Config(settings.tablePrefix());
-            };
-            sql = new SqlGraveStorage(
-                    jdbc,
-                    settings.pool(),
-                    settings.historyEnabled(),
-                    settings.keepPerPlayer(),
-                    settings.keepDays()
-            );
-            sql.init();
-            StorageMigration.migrateIfNeeded(getDataFolder(), sql);
-            return sql;
-        } catch (Throwable throwable) {
-            if (sql != null) sql.close();
-            CloverLogger.error("failed to initialize {} storage; falling back to JSON", settings.type(), throwable);
+        if ("JSON".equals(settings.type())) {
             JsonGraveStorage json = new JsonGraveStorage(getDataFolder());
             json.init();
             return json;
+        }
+
+        JdbcConfig jdbc = switch (settings.type()) {
+            case "H2" -> h2Config(settings.tablePrefix());
+            case "SQLITE" -> sqliteConfig(settings.tablePrefix());
+            case "MYSQL" -> mysqlConfig(settings);
+            default -> throw new IllegalArgumentException("Unsupported storage.type: " + settings.type());
+        };
+
+        SqlGraveStorage sql = new SqlGraveStorage(
+                jdbc,
+                settings.pool(),
+                settings.historyEnabled(),
+                settings.keepPerPlayer(),
+                settings.keepDays()
+        );
+        try {
+            sql.init();
+            StorageMigration.migrateIfNeeded(getDataFolder(), sql);
+            return sql;
+        } catch (RuntimeException ex) {
+            try {
+                sql.close();
+            } catch (RuntimeException closeFailure) {
+                ex.addSuppressed(closeFailure);
+            }
+            throw ex;
         }
     }
 
@@ -221,8 +230,20 @@ public final class AxGraves extends JavaPlugin {
 
     @NotNull
     private JdbcConfig mysqlConfig(@NotNull StorageSettings settings) {
+        if (!settings.mysqlAddress().matches("[A-Za-z0-9.-]+")
+                || !settings.mysqlDatabase().matches("[A-Za-z0-9_-]+")
+                || settings.mysqlPort() < 1 || settings.mysqlPort() > 65535) {
+            throw new IllegalArgumentException("Invalid MySQL address, database or port");
+        }
+
+        String sslMode = settings.mysqlSslMode().trim().toUpperCase(Locale.ROOT);
+        if (!List.of("REQUIRED", "VERIFY_CA", "VERIFY_IDENTITY").contains(sslMode)) {
+            throw new IllegalArgumentException("storage.mysql.ssl-mode must be REQUIRED, VERIFY_CA or VERIFY_IDENTITY");
+        }
+
         String url = "jdbc:mysql://" + settings.mysqlAddress() + ':' + settings.mysqlPort() + '/' + settings.mysqlDatabase()
-                + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
+                + "?sslMode=" + sslMode
+                + "&allowPublicKeyRetrieval=false&connectTimeout=5000&socketTimeout=10000&serverTimezone=UTC";
         return new JdbcConfig(
                 JdbcConfig.Type.MYSQL,
                 url,
@@ -335,6 +356,7 @@ public final class AxGraves extends JavaPlugin {
             @NotNull String mysqlDatabase,
             @NotNull String mysqlUsername,
             @NotNull String mysqlPassword,
+            @NotNull String mysqlSslMode,
             @NotNull JdbcPoolConfig pool
     ) {
     }
