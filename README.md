@@ -33,7 +33,7 @@ The project is designed around Paper 26.3 and Cardboard compatibility without ru
 | Interaction | Right-click inventory, sneak-right-click instant pickup |
 | Placement | Safe-location search around lava, solid blocks and Nether roof |
 | Protection | Ownership rules and temporary protection from other players |
-| Persistence | H2, SQLite, MySQL and JSON fallback/migration support |
+| Persistence | H2, SQLite, MySQL and explicitly configured JSON with migration support |
 | Recovery | Grave list, history, restore and teleport commands |
 | Economy | Optional Vault-backed teleport cost |
 | Integration | PlaceholderAPI and public grave events |
@@ -59,7 +59,7 @@ The CI pipeline also includes Cardboard-oriented compatibility checks for the mo
 
 ## Installation
 
-1. Download `CloverGraves-2.2.0.jar` from [Releases](https://github.com/slyphmp4/CloverGraves/releases), or build the project yourself.
+1. Build the `port/26.3-stable-audit` branch with `./gradlew clean build`, or obtain a verified CI artifact. After the 2.2.0 release is published, its JAR will also be available under [Releases](https://github.com/slyphmp4/CloverGraves/releases).
 2. Put the JAR into the server's `plugins/` directory.
 3. Start the server once to generate `config.yml` and `messages.yml`.
 4. Review grave lifetime, storage, protection and teleport settings.
@@ -291,7 +291,7 @@ Supported persistent backends include:
 | `H2` | Default local SQL database |
 | `SQLITE` | Alternative local SQLite database |
 | `MYSQL` | Remote/shared MySQL-compatible database |
-| JSON fallback | Recovery/fallback path when applicable |
+| `JSON` | Explicitly selected JSON storage; not an automatic SQL failure fallback |
 
 MySQL connection-pool settings are configurable under `storage.mysql.pool`.
 
