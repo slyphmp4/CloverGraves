@@ -59,7 +59,7 @@ The CI pipeline also includes Cardboard-oriented compatibility checks for the mo
 
 ## Installation
 
-1. Build the `port/26.3-stable-audit` branch with `./gradlew clean build`, or obtain a verified CI artifact. After the 2.2.0 release is published, its JAR will also be available under [Releases](https://github.com/slyphmp4/CloverGraves/releases).
+1. Download the `CloverGraves-2.2.0.jar` from [Releases](https://github.com/slyphmp4/CloverGraves/releases/tag/v2.2.0), or build the `rewrite` branch with `./gradlew clean build`.
 2. Put the JAR into the server's `plugins/` directory.
 3. Start the server once to generate `config.yml` and `messages.yml`.
 4. Review grave lifetime, storage, protection and teleport settings.
@@ -377,7 +377,7 @@ CloverGraves uses Gradle Kotlin DSL, Java 25 and Shadow.
 ```bash
 git clone https://github.com/slyphmp4/CloverGraves.git
 cd CloverGraves
-git checkout port/26.3-stable-audit
+git checkout rewrite
 ./gradlew clean build
 ```
 
@@ -398,6 +398,8 @@ The build bundles and relocates the runtime libraries that belong inside CloverG
 CloverGraves avoids runtime NMS and CraftBukkit internals. Modern holograms use Bukkit's native `TextDisplay` API, and Cardboard-specific checks are isolated in compatibility code and CI rather than mixed into the core grave implementation.
 
 The build workflow performs source/JAR checks and runtime-oriented compatibility validation before publishing artifacts.
+
+The CI runtime smoke test uses Cardboard's own Gradle `runServer` environment. Before production rollout, verify a standalone Cardboard distribution includes its required runtime libraries; a missing upstream `geantyref` dependency can prevent Cardboard itself from starting. Make a backup of existing grave data before upgrading.
 
 For Cardboard-specific bug reports, include the CloverGraves version, Cardboard build or commit and the relevant server log.
 
