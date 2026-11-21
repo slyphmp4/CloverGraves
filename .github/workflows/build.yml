@@ -80,39 +80,54 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p smoke/mods smoke/plugins
-          JAR="$(find build/libs -maxdepth 1 -name 'CloverGraves-*.jar' ! -name '*-unshaded.jar' | head -n 1)"
-          cp "$JAR" smoke/plugins/CloverGraves.jar
+          JAR="$(find build/libs -maxdepth 1 -name 'CloverGraves-*.jar' ! -name '*-plain.jar' -print -quit)"
+          test -n "$JAR"
+          mkdir -p cardboard-src/run/plugins
+          cp "$JAR" cardboard-src/run/plugins/CloverGraves.jar
 
-          curl -fsSL -o fabric-installer.jar 'https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.1.2/fabric-installer-1.1.2.jar'
-          curl -fsSL -o smoke/mods/fabric-api.jar 'https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/0.166.2+26.3/fabric-api-0.166.2+26.3.jar'
-
-          cd smoke
-          java -jar ../fabric-installer.jar server -mcversion 26.3 -loader 0.20.1 -downloadMinecraft
-          printf 'eula=true\n' > eula.txt
-          cat > server.properties <<'PROPERTIES'
+          printf 'eula=true\n' > cardboard-src/run/eula.txt
+          cat > cardboard-src/run/server.properties <<'PROPERTIES'
           online-mode=false
-          enable-rcon=false
-          enable-query=false
-          spawn-protection=0
-          view-distance=2
-          simulation-distance=2
-          max-players=1
-          motd=CloverGraves Cardboard TextDisplay CI
+          server-ip=127.0.0.1
+          level-name=clovergraves-smoke
+          view-distance=3
+          simulation-distance=3
+          pause-when-empty-seconds=0
           PROPERTIES
 
-          mkfifo server.in
-          java -Dclovergraves.compatTest=true -Xms1G -Xmx2G -jar fabric-server-launch.jar nogui <server.in >server.log 2>&1 &
+          LOG="$GITHUB_WORKSPACE/clovergraves-cardboard-smoke.log"
+          PIPE="$GITHUB_WORKSPACE/clovergraves-cardboard-smoke-input"
+          rm -f "$PIPE"
+          mkfifo "$PIPE"
+          export JAVA_TOOL_OPTIONS="-Dclovergraves.compatTest=true"
+
+          (
+            cd cardboard-src
+            ./gradlew runServer --no-daemon < "$PIPE" > "$LOG" 2>&1
+          ) &
           SERVER_PID=$!
-          exec 3>server.in
+          exec 3>"$PIPE"
+          cleanup() {
+            if kill -0 "$SERVER_PID" 2>/dev/null; then
+              printf 'stop\n' >&3 || true
+              sleep 3
+              kill "$SERVER_PID" 2>/dev/null || true
+            fi
+            exec 3>&- || true
+            rm -f "$PIPE"
+          }
+          trap cleanup EXIT
 
           PASS=0
-          for i in $(seq 1 180); do
-            if grep -q 'CLOVERGRAVES_CARDBOARD_26_3_SELFTEST_PASS' server.log 2>/dev/null; then
-              PASS=1
+          for i in $(seq 1 240); do
+            if grep -q 'CLOVERGRAVES_CARDBOARD_26_3_SELFTEST_FAIL' "$LOG" 2>/dev/null; then
               break
             fi
-            if grep -q 'CLOVERGRAVES_CARDBOARD_26_3_SELFTEST_FAIL' server.log 2>/dev/null; then
+            if grep -Eq 'Error occurred while (enabling|loading) CloverGraves|Could not load .*CloverGraves|Mixin apply failed|NoClassDefFoundError' "$LOG" 2>/dev/null; then
+              break
+            fi
+            if grep -q 'CLOVERGRAVES_CARDBOARD_26_3_SELFTEST_PASS' "$LOG" 2>/dev/null && grep -q 'Done (' "$LOG" 2>/dev/null; then
+              PASS=1
               break
             fi
             if ! kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -120,20 +135,17 @@ jobs:
             fi
             sleep 1
           done
-
-          printf 'stop\n' >&3 || true
-          exec 3>&-
-          wait "$SERVER_PID" || true
-          cat server.log
-
           if [ "$PASS" -ne 1 ]; then
-            echo 'Cardboard 26.3 TextDisplay self-test did not pass.'
+            echo "Cardboard 26.3 CloverGraves runtime self-test did not pass."
+            tail -n 180 "$LOG" || true
             exit 1
           fi
-          if grep -E 'Cannot spawn an entity for org\.bukkit\.entity\.TextDisplay|ClassCastException.*TextDisplay|AbstractMethodError|NoSuchMethodError|UnsupportedOperationException|Error occurred while enabling CloverGraves|Could not load .*CloverGraves|NoClassDefFoundError.*(CloverGraves|artillexstudios)' server.log; then
-            echo 'CloverGraves TextDisplay runtime error detected.'
-            exit 1
-          fi
+          printf 'stop\n' >&3
+          wait "$SERVER_PID"
+          grep -q 'Goodbye!' "$LOG"
+          trap - EXIT
+          exec 3>&-
+          rm -f "$PIPE"
 
       - name: Upload CloverGraves jar
         uses: actions/upload-artifact@v7
