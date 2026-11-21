@@ -377,7 +377,7 @@ CloverGraves uses Gradle Kotlin DSL, Java 25 and Shadow.
 ```bash
 git clone https://github.com/slyphmp4/CloverGraves.git
 cd CloverGraves
-git checkout rewrite
+git checkout port/26.3-stable-audit
 ./gradlew clean build
 ```
 
